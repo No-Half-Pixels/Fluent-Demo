@@ -1,0 +1,245 @@
+<?php
+/**
+ * Fluent Demo Global Options class.fluent-demo-global-options.php.
+ *
+ * The job of this class is to create the main global options page.
+ *
+ * @package Fluent Demo
+ * @since 1.0.0
+ * @version 1.0.0
+ */
+/**
+ * Fluent_Demo_Global_Options
+ */
+class Fluent_Demo_Global_Options extends Fluent_Demo_Base{
+
+	/**
+     * @var string $version Class version.
+     */
+    public $version = '1.0.0';
+
+	/**
+     * @var string $sections - contains all of the sections for the gloabl page
+     */
+    private $sections = array();
+
+    /**
+     * @var string $page_args - contains all of the arguments for the global page
+     */
+    private $page_args = array();
+
+    /**
+     * @var string $panel - the options panel instance
+     */
+    private $panel = null;
+
+    /**
+      * Function loaded on class creation
+      *
+      * @since 1.0.0
+      *
+      * @return none
+      *
+      */
+	function __construct(){
+
+		//setup global options
+		$this->setup_sections();
+		$this->setup_page_args();
+		$this->panel = new Fluent_Options_Page( $this->page_args, $this->sections );
+
+	}
+
+	/**
+      * Creates global settings
+      *
+      * @since 1.0.0
+      *
+      * @return none
+      *
+      */
+	private function setup_sections(){
+
+		$super_admins = array();
+		if(!function_exists('get_user_by')){
+			require_once(ABSPATH . '/wp-includes/pluggable.php');
+		}
+		foreach(get_super_admins() as $login){
+			$admin = get_user_by('login', $login);
+			$super_admins[$admin->ID] = $admin->get('display_name');
+		}
+
+		$this->sections['global_settings'] = array(
+		    'dash_icon' => 'admin-generic',
+		    'title' =>  __('Global Settings', $this->domain),
+		    'description' => __('These are the global settings for Fluent Demo, please fill in each option accordingly.', $this->domain),
+		    'context' => 'normal',
+		    'priority' => 'high',
+		    'fields' => array(
+		        'company_name' => array(
+		            'type' => 'text',
+		            'title' => __('Company Name', $this->domain),
+		            'sub_title' => __('', $this->domain),
+		            'required' => true,
+		            'description' => __('', $this->domain),
+		            'default' => get_bloginfo('name')
+		        ),
+		        'company_url' => array(
+		            'type' => 'url',
+		            'title' => __('Company Website', $this->domain),
+		            'sub_title' => __('', $this->domain),
+		            'required' => true,
+		            'description' => __('', $this->domain),
+		            'default' => site_url(),
+		            'conditions' => array(
+		            	array(
+		            		array(
+		            			'id' => 'company_name',
+		            			'type' => 'required'
+		            		)
+		            	)
+		            ),
+		        ),
+		        'logo' => array(
+		            'type' => 'media',
+		            'title' => __('Demo Frame Logo', $this->domain),
+		            'sub_title' => __('Minimum 60px height', $this->domain),
+		            'required' => true,
+		            'description' => __('', $this->domain),
+		            'conditions' => array(
+		            	array(
+		            		array(
+		            			'id' => 'company_name',
+		            			'type' => 'required'
+		            		)
+		            	)
+		            ),
+		        ),
+		        'accent_color' => array(
+		            'type' => 'color',
+		            'title' => __('Accent Color', $this->domain),
+		            'sub_title' => __('', $this->domain),
+		            'description' => __('Set the accent color for the demo page.', $this->domain),
+		            'default' => '#666',
+		            'required' => true,
+		            'conditions' => array(
+		            	array(
+		            		array(
+		            			'id' => 'company_name',
+		            			'type' => 'required'
+		            		)
+		            	)
+		            ),
+		        ),
+		        'admin_user' => array(
+		            'type' => 'select',
+		            'title' => __('Admin User', $this->domain),
+		            'sub_title' => __('', $this->domain),
+		            'description' => __('Set the admin user who will be assigned the administrator on all created demos.', $this->domain),
+		            'options' => $super_admins,
+		            'required' => true,
+		            'conditions' => array(
+		            	array(
+		            		array(
+		            			'id' => 'company_name',
+		            			'type' => 'required'
+		            		)
+		            	)
+		            ),
+		        ),
+		        'hide_demoed' => array(
+		            'type' => 'radio',
+		            'title' => __('Hide Demoed Sites', $this->domain),
+		            'sub_title' => __('', $this->domain),
+		            'description' => __('Select yes to disable the demoed sites from showing in the admin bar "my sites" list.', $this->domain),
+		            'default' => 'yes',
+		            'options' => array(
+		            	'no' => __('No', $this->domain),
+		            	'yes' => __('Yes', $this->domain)
+		            ),
+		            'conditions' => array(
+		            	array(
+		            		array(
+		            			'id' => 'url',
+		            			'type' => 'required'
+		            		)
+		            	)
+		            ),
+		        ),
+		        'break_out' => array(
+		            'type' => 'radio',
+		            'title' => __('Break Out Of Iframes', $this->domain),
+		            'sub_title' => __('', $this->domain),
+		            'description' => __('Select yes to enable the script which "breaks out" the page from an iframe on selling sites.', $this->domain),
+		            'default' => 'yes',
+		            'options' => array(
+		            	'no' => __('No', $this->domain),
+		            	'yes' => __('Yes', $this->domain)
+		            ),
+		            'conditions' => array(
+		            	array(
+		            		array(
+		            			'id' => 'url',
+		            			'type' => 'required'
+		            		)
+		            	)
+		            ),
+		        ),
+		        'request_text' => array(
+		            'type' => 'editor',
+		            'title' => __('Request Form Text', $this->domain),
+		            'sub_title' => __('', $this->domain),
+		            'description' => __('Provide a unique message on the demo request modal.', $this->domain),
+		            'required' => true,
+		            'conditions' => array(
+		            	array(
+		            		array(
+		            			'id' => 'company_name',
+		            			'type' => 'required'
+		            		)
+		            	)
+		            ),
+		        ),
+		        'garbage_collection' => array(
+		            'type' => 'number',
+		            'title' => __('Cleanup Time', $this->domain),
+		            'sub_title' => __('', $this->domain),
+		            'description' => __('After how many hours would you like demo sites be deleted?', $this->domain),
+		            'required' => true,
+		            'default' => 24,
+		            'conditions' => array(
+		            	array(
+		            		array(
+		            			'id' => 'company_name',
+		            			'type' => 'required'
+		            		)
+		            	)
+		            ),
+		        ),
+		    )
+		);
+	}
+
+	/**
+      * Creates the args for the global settings
+      *
+      * @since 1.0.0
+      *
+      * @return none
+      *
+      */
+	private function setup_page_args(){
+		$this->page_args = array(
+		    'option_name' => 'fluent_demo',
+		    'page_args' => array(
+		        'slug' => 'fluent-demo',//the unique slug of the page
+		        'menu_title' => __( 'Fluent Demo', $this->domain),//the title in the sidebar menu of the page
+		        'page_title' => __( 'Fluent Demo', $this->domain ),//the page title when rendered
+		        'network' => true,
+		        'cap' => 'manage_sites',//the capability of users who can access this page
+		        'menu_icon' => 'dashicons-welcome-view-site',//the dash icon or url to image icon for use in the menu (only for top level pages)
+		    )
+	    );
+	}
+
+}

@@ -1,0 +1,199 @@
+<?php
+/**
+ * Fluent Demo Tests class.fluent-demo-tests.php.
+ *
+ * The job of this class is to create and validate the system tests needed to ensure we can create demos.
+ *
+ * @package Fluent Demo
+ * @since 1.0.0
+ * @version 1.0.0
+ */
+
+/**
+ * Fluent_Demo_Tests
+ */
+class Fluent_Demo_Tests extends Fluent_Demo_Base{
+
+	/**
+	* @var string $version Class version.
+	*/
+	public $version = '1.0.0';
+
+	/**
+	* @var object $page. Contains the Fluent Framework Fluent_Page object.
+	*/
+	public $page = null;
+
+	/**
+	* Function loaded on class creation
+	*
+	* @since 1.0.0
+	*
+	* @return none
+	*
+	*/
+	function __construct(){
+		//setup page for testing compatability
+		$this->page = new Fluent_Page(array(
+            'slug' => 'fluent-demo-setup',
+            'menu_title' => __( 'Test Setup', $this->domain ),
+            'page_title' => __( 'Test Setup', $this->domain ),
+            'parent' => 'fluent-demo',
+            'cap' => 'manage_options',
+            'priority' => null,
+            'menu_icon' => '',
+            'page_icon' => 'icon-themes',
+            'callback' => $this->provide('setup_page'),
+            'network' => true
+        ));
+        add_action('network_admin_notices', $this->provide('test_error_notice'));
+        add_action('admin_notices', $this->provide('test_error_notice'));
+        add_action('wp_ajax_fluent-demo-ajax-test', $this->provide('ajax_tests'));
+	}
+
+	/**
+	* Conditionally displays an notice error to superadmins if they havent complete a test, or the test needs an update, or the test hasnt been done in 30 days.
+	*
+	* @since 1.0.0
+	*
+	* @return none
+	*
+	*/
+	public function test_error_notice(){
+		if(get_current_screen()->id == 'fluent-demo_page_fluent-demo-setup-network' || !is_super_admin()){return;}
+		$test = get_site_option('fluent_demo_test_results', array('passes' => false, 'time' => '', 'update' => false));
+		if($test['passes'] == false){
+			echo '<div class="updated error"><p>'.sprintf(__('Before using Fluent Demo please make sure you have completed the test setup found <a href="%s"><strong>here</strong></a>.', $this->domain), network_admin_url('admin.php?page=fluent-demo-setup')).'</p></div>';
+		}elseif($test['time'] < strtotime('-30 days')){
+			echo '<div class="updated error"><p>'.sprintf(__('It looks like the last time you ran the setup test for Fluent Demo was over 30 days ago, we recommend you retest <a href="%s"><strong>here</strong></a> just be sure its all working.', $this->domain), network_admin_url('admin.php?page=fluent-demo-setup')).'</p></div>';
+		}elseif($test['update'] == true){
+			echo '<div class="updated error"><p>'.sprintf(__('An Update to Fluent Demo may have added additional requirements to functions, we recommend you retest <a href="%s"><strong>here</strong></a> just be sure its all working.', $this->domain), network_admin_url('admin.php?page=fluent-demo-setup')).'</p></div>';
+		}
+	}
+
+	/**
+	* Ajax response for conducting tests
+	*
+	* @since 1.0.0
+	*
+	* @return none
+	*
+	*/
+	public function ajax_tests($post = array()){
+
+		if(empty($post)){
+			$post = $_POST;
+		}
+
+		$data = array();
+		$data['next_test'] = false;
+		$data['result'] = 'error';
+		$data['message'] = __('An unknown error occured!', $this->domain);
+
+		if(!wp_verify_nonce($post['_wpnonce'], 'fluent-demo-ajax-test')){
+			echo json_encode($data);
+			die();
+		}
+
+		update_site_option('fluent_demo_test_results', array('passes' => false, 'time' => time(), 'update' => false));
+		
+		switch($post['test']){
+			case 'filesystem':
+				$data['next_test'] = false;
+				if(get_filesystem_method(array(), WP_CONTENT_DIR . '/uploads/sites') === 'direct'){
+					$creds = request_filesystem_credentials(wp_nonce_url(admin_url('admin.php?page=fluent-demo-setup&test=filesystem'), 'fluent-demo-setup'), '', false, WP_CONTENT_DIR . '/uploads/sites', null);
+					if ( ! WP_Filesystem($creds) ) {
+						$data['result'] = 'error';
+						$data['message'] = __('We can\'t access the filesystem, please check your wp-content folder permissions. Fluent Demo requires direct write access to your wp-content folder.', $this->domain);
+						update_site_option('fluent_demo_test_results', array('passes' => false, 'time' => time(), 'update' => false));
+					}else{
+						$data['next_test'] = 'success_message';
+						$data['result'] = 'success';
+						$data['message'] = __('We can access the filesystem, great!', $this->domain);
+					}
+				}else{
+					$data['result'] = 'error';
+					$data['message'] = __('We can\'t access the filesystem, please add <code>define(\'FS_METHOD\', \'direct\');</code> to your <code>wp-config.php</code> file and ensure WordPress has write permissions to the <code>wp-content/uploads/sites</code> folder. Fluent Demo requires direct write access to your wp-content folder.', $this->domain);
+					update_site_option('fluent_demo_test_results', array('passes' => false, 'time' => time(), 'update' => false));
+				}
+			break;
+			case 'success_message':
+				update_site_option('fluent_demo_test_results', array('passes' => true, 'time' => time(), 'update' => false));
+				$data['next_test'] = false;
+				$data['result'] = 'success';
+				$data['message'] = __('It looks like your install has passed all tests, perfect!', $this->domain);
+			break;
+		}
+		echo json_encode($data);
+		die();
+	}
+
+	/**
+	* Renders the test page sent as a callback to the Fluent_Page class.
+	*
+	* @since 1.0.0
+	*
+	* @return none
+	*
+	*/
+	public function setup_page(){
+
+		$test = get_site_option('fluent_demo_test_results', array('passes' => false, 'time' => '', 'update' => false));
+
+		echo '<div class="wrap">';
+            echo '<h2>'.get_admin_page_title().'</h2>';
+
+            echo '<style type="text/css">.updated.warning{border-left-color: orange;}</style>';
+
+            echo '<div id="messages"></div>';
+            echo '<p id="loading" style="text-align:center;display: none;"><img src="'.admin_url('images/spinner-2x.gif').'"/></p>';
+
+            echo '<p>'.__('The Fluent Demo Plugin requires a little more access to your system than most, to ensure your site/server setup is suitable and working correctly for the plugin please follow the instructions below.', $this->domain).'</p>';
+            echo '<p>'.__('To ensure compatability simply click the test button below. This will run through some automated tests to ensure demos can be created.', $this->domain).'</p>';
+            echo '<p>'.__('The test will stop on failure and let you know of anything that needs to be done to ensure compatability.', $this->domain).'</p>';
+            echo '<p>'.__('It is vital you complete the test below before attemping to allow demo creation.', $this->domain).'</p>';
+            echo '<p>'.__('Once the tests pass your install will be flagged as ok. We have added a timebomb to the tests of 30 days. This will ask you to retest when the period expires. Its not vital you compelete the tests every 30 days, but it would be prudent to retest whenever any changes are made to the site or server.', $this->domain).'</p>';
+            if($test['time'] == ''){
+            	echo '<p>'.__('It looks like you haven\'t completed a test yet, please click the button below to ensure compatability.', $this->domain).'</p>';
+            }else{
+            	echo '<p>'.sprintf(__('The last test was made on %s. You can retest if you feel something has changes, or just want to check.', $this->domain), date(get_option('date_format') . ' ' . get_option('time_format'), $test['time'])).'</p>';
+            }
+			echo '<p><a href="#" id="test" class="button button-primary" title="'.__('Test', $this->domain).'">'.__('Test', $this->domain).'</a></p>';
+			?>
+			<script>
+			var errors = [], warnings = [], passes = [];
+			function test_case(test){
+				if(test == false){return;}
+				jQuery('#loading').fadeIn();
+				jQuery.post(
+					'<?php echo admin_url("admin-ajax.php?action=fluent-demo-ajax-test");?>', 
+					{
+						_wpnonce: '<?php echo wp_create_nonce("fluent-demo-ajax-test");?>', 
+						test: test
+					}, 
+					function(response){
+						jQuery('#loading').fadeOut('slow', function(){
+							data = jQuery.parseJSON(response);
+							jQuery('#messages').append('<div class="updated '+data.result+'"><p>'+data.message+'</p></div>');
+							if(data.next_test != false){
+								test_case(data.next_test);
+							}
+						});
+					}
+				);
+			} 
+			jQuery(document).ready(function(){
+				jQuery(document).on('click', '#test', function(){
+					jQuery('#messages').html('');
+					test_case('filesystem');
+					return false;
+				});
+			});
+			</script>
+			<?php
+
+        echo '</div>';
+
+	}
+
+}

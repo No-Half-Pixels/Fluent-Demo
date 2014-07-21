@@ -1,0 +1,41 @@
+<?php
+/**
+ * Fluent_Demo_User_Field
+ *
+ * @package Fluent Demo
+ * @since 1.0.0
+ * @version 1.0.0
+ */
+
+Fluent_Options::register_field_type(array(
+    'type' => 'demo-user',
+    'class_name' => 'Fluent_Demo_User_Field',
+    'path' => dirname(FLUENT_DEMO_FILE) . '/includes/class.fluent-demo-user-field.php',
+    'assets_path' => FLUENT_DEMO_URL . 'assets/fields/demo-user/'
+));
+
+add_action('fluent/options/field/demo-user/render', array('Fluent_Demo_User_Field', 'render'), 1, 2);
+
+/**
+ * Fluent_Demo_User_Field simple text field.
+ */
+class Fluent_Demo_User_Field extends Fluent_Field{    
+    
+    /**
+     * Render the field HTML based on the data provided.
+     *
+     * @since 1.0.0
+     *
+     * @param array $data field data.
+     *
+     * @param object $object Fluent_Options instance allowing you to alter anything if required.
+     */
+    public static function render($data = array(), $object){
+        
+        $data = self::data_setup($data);
+        global $post;
+        //print_r($post);
+        echo '<input type="text" name="'.$data['option_name'].'['.$data['name'].']" id="'.$data['id'].'" class="large-text" value="'.$data['value'].'" placeholder="'.$data['placeholder'].'" />'; 
+    }
+    
+}

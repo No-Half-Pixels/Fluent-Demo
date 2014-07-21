@@ -1,0 +1,41 @@
+<?php
+/**
+ * Fluent Demo Log class.fluent-demo-log.php.
+ *
+ * The job of this class is to log all events to a post id meta field during creation.
+ *
+ * @package Fluent Demo
+ * @since 1.0.0
+ * @version 1.0.0
+ */
+/**
+ * Fluent_Demo_Log
+ */
+class Fluent_Demo_Log extends Fluent_Demo_Base{
+
+	/**
+     * @var string $domain Class text domain.
+     */
+    public $version = '1.0.0';
+
+    public static function write($post_id, $message = '', $code = 'info'){
+    	if(!$post_id || $message == '' || $code == ''){return false;}
+    	$log = get_post_meta($post_id, 'fluent_demo_log', true);
+    	$log[] = array('code' => $code, 'message' => $message, 'time' => time());
+    	update_post_meta($post_id, 'fluent_demo_log', $log);
+    	return true;
+    }
+
+    public static function info($post_id = null, $message = ''){
+    	return self::write($post_id, $message, 'info');
+    }
+
+    public static function error($post_id = null, $message = ''){
+    	return self::write($post_id, $message, 'error');
+    }
+
+    public static function warning($post_id = null, $message = ''){
+    	return self::write($post_id, $message, 'warning');
+    }
+    
+}

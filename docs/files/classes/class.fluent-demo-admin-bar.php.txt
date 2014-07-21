@@ -1,0 +1,120 @@
+<?php
+/**
+ * Fluent Demo Admin Bar class.fluent-demo-admin-bar.php.
+ *
+ * The job of this class is to render items in the admin bar on demo sites and tobe demo'ed sites
+ *
+ * @package Fluent Demo
+ * @since 1.0.0
+ * @version 1.0.0
+ */
+
+/**
+ * Fluent_Demo_Admin_Bar
+ */
+class Fluent_Demo_Admin_Bar extends Fluent_Demo_Base{
+
+	/**
+	* @var string $version Class version.
+	*/
+	public $version = '1.0.0';
+
+	/**
+	* Function loaded on class creation
+	*
+	* @since 1.0.0
+	*
+	* @return none
+	*
+	*/
+	function __construct(){
+		add_action('wp_before_admin_bar_render', $this->provide('render_network_link'));
+		add_action('wp_before_admin_bar_render', $this->provide('render_fluent_demo_admin_link'));
+	}
+
+	/**
+	* Renders a link to the network options page for fluent demo only to superadmins and if the admin bar is showing.
+	*
+	* @since 1.0.0
+	*
+	* @return none
+	*
+	*/
+	public function render_network_link(){
+		if ( ! is_super_admin() || ! is_admin_bar_showing() )
+          		return;
+		global $wp_admin_bar;
+		$wp_admin_bar->add_node( array(
+			'parent' => 'network-admin',
+			'id'     => 'network-admin-fluent-demo',
+			'title'  => __( 'Fluent Demo', $this->domain ),
+			'href'   => network_admin_url( 'admin.php?page=fluent-demo' ),
+		) );
+	}
+
+	/**
+	* Renders a link to the demos post type for admins to manage.
+	*
+	* @since 1.0.0
+	*
+	* @return none
+	*
+	*/
+	public function render_fluent_demo_admin_link(){
+		if (!is_admin_bar_showing() )
+          		return;
+		global $wp_admin_bar;
+
+		foreach ( (array) $wp_admin_bar->user->blogs as $blog ) {
+			switch_to_blog( $blog->userblog_id );
+			if(!is_plugin_active(plugin_basename(FLUENT_DEMO_FILE))){
+				restore_current_blog();
+				continue;
+			}
+
+			$menu_id  = 'blog-' . $blog->userblog_id;
+
+			if(get_option('fluent_demoed', false)){
+				$opts = get_site_option('fluent_demo');
+				if(isset($opts['hide_demoed']) && $opts['hide_demoed'] == 'yes'){
+					//$node = $wp_admin_bar->get_node($menu_id);
+					$wp_admin_bar->remove_node($menu_id);
+					//$node->title = $node->title . ' Demoed';
+					//$wp_admin_bar->add_node($node);
+				}
+				restore_current_blog();
+				continue;
+			}
+
+			$wp_admin_bar->add_node( array(
+				'parent' => $menu_id,
+				'id'     => $blog->userblog_id.'-fluent-demo',
+				'title'  => __( 'Demos', $this->domain ),
+				'href'   => admin_url( 'edit.php?post_type=demo' ),
+			) );
+
+			$wp_admin_bar->add_node( array(
+				'parent' => $blog->userblog_id.'-fluent-demo',
+				'id'     => $blog->userblog_id.'-fluent-demo-all',
+				'title'  => __( 'All Demos', $this->domain ),
+				'href'   => admin_url( 'edit.php?post_type=demo' ),
+			) );
+			$wp_admin_bar->add_node( array(
+				'parent' => $blog->userblog_id.'-fluent-demo',
+				'id'     => $blog->userblog_id.'-fluent-demo-new',
+				'title'  => __( 'Add New', $this->domain ),
+				'href'   => admin_url( 'post-new.php?post_type=demo' ),
+			) );
+			$wp_admin_bar->add_node( array(
+				'parent' => $blog->userblog_id.'-fluent-demo',
+				'id'     => $blog->userblog_id.'-fluent-demo-settings',
+				'title'  => __( 'Settings', $this->domain ),
+				'href'   => admin_url( 'edit.php?post_type=demo&page=fluent-demo-settings' ),
+			) );
+
+			restore_current_blog();
+		}
+
+	}
+
+}

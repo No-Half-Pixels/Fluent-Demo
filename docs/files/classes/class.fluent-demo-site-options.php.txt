@@ -1,0 +1,262 @@
+<?php
+/**
+ * Fluent Demo Site Options class.fluent-demo-global-options.php.
+ *
+ * The job of this class is to create the main fluent demo options page per site.
+ *
+ * @package Fluent Demo
+ * @since 1.0.0
+ * @version 1.0.0
+ */
+/**
+ * Fluent_Demo_Site_Options
+ */
+class Fluent_Demo_Site_Options extends Fluent_Demo_Global_Options{
+
+	/**
+     * @var string $version Class version.
+     */
+    public $version = '1.0.0';
+
+    /**
+      * Function loaded on class creation
+      *
+      * @since 1.0.0
+      *
+      * @return none
+      *
+      */
+	function __construct(){
+
+		//setup site options
+		$this->setup_sections();
+		$this->setup_page_args();
+		$this->panel = new Fluent_Options_Page( $this->page_args, $this->sections );
+
+	}
+
+	/**
+      * Creates global settings
+      *
+      * @since 1.0.0
+      *
+      * @return none
+      *
+      */
+	private function setup_sections(){
+		$this->sections['demo_settings'] = array(
+		    'dash_icon' => 'welcome-view-site',
+		    'title' =>  __('Demo Settings', $this->domain),
+		    'description' => __('These are the demo settings for Fluent Demo.', $this->domain),
+		    'context' => 'normal',
+		    'priority' => 'high',
+		    'fields' => array(
+		        'enabled' => array(
+		            'type' => 'radio',
+		            'title' => __('Enable Demobar', $this->domain),
+		            'sub_title' => __('', $this->domain),
+		            'description' => __('Enable the Fluent Demo bar on this site.', $this->domain),
+		            'options' => array('no' => __('No', $this->domain),'yes' => __('Yes', $this->domain)),
+		            'default' => 'no'
+		        ),
+		        'title' => array(
+		            'type' => 'text',
+		            'title' => __('Demo Title', $this->domain),
+		            'sub_title' => __('', $this->domain),
+		            'description' => __('The title to use during demo selection.', $this->domain),
+		            'default' => get_bloginfo('name'),
+		            'conditions' => array(
+		            	array(
+		            		array(
+		            			'id' => 'enabled',
+		            			'value' => 'yes'
+		            		)
+		            	)
+		            ),
+		        ),
+		        'screenshot' => array(
+		            'type' => 'media',
+		            'title' => __('Demo Screenshot', $this->domain),
+		            'sub_title' => __('', $this->domain),
+		            'description' => __('Upload or select the screenshot for this demo.', $this->domain),
+		            'conditions' => array(
+		            	array(
+		            		array(
+		            			'id' => 'title',
+		            			'type' => 'required'
+		            		)
+		            	)
+		            ),
+		        ),
+		        'url' => array(
+		            'type' => 'url',
+		            'title' => __('Download/Purchase URL', $this->domain),
+		            'sub_title' => __('', $this->domain),
+		            'description' => __('Enter the download or purchase link here.', $this->domain),
+		            'conditions' => array(
+		            	array(
+		            		array(
+		            			'id' => 'screenshot',
+		            			'type' => 'required'
+		            		)
+		            	)
+		            ),
+		        ),
+		        'priority' => array(
+		            'type' => 'number',
+		            'title' => __('Priority', $this->domain),
+		            'sub_title' => __('0 = Highest', $this->domain),
+		            'description' => __('Select a priority for this site in the list of demo sites.', $this->domain),
+		            'default' => '1',
+		            'conditions' => array(
+		            	array(
+		            		array(
+		            			'id' => 'url',
+		            			'type' => 'required'
+		            		)
+		            	)
+		            ),
+		        ),
+		        'enable_responsive' => array(
+		            'type' => 'radio',
+		            'title' => __('Enable Responsive Demos', $this->domain),
+		            'sub_title' => __('Shows the screen size icons', $this->domain),
+		            'description' => __('Enabling this feature allows the visitor to simulate the demo site on smaller devices.', $this->domain),
+		            'options' => array('no' => __('No', $this->domain),'yes' => __('Yes', $this->domain)),
+		            'default' => 'yes',
+		            'conditions' => array(
+		            	array(
+		            		array(
+		            			'id' => 'url',
+		            			'type' => 'required'
+		            		)
+		            	)
+		            ),
+		        ),
+		        'admin_notices' => array(
+		            'type' => 'editor',
+		            'title' => __('Admin Notice', $this->domain),
+		            'sub_title' => __('', $this->domain),
+		            'description' => __('Create an admin notice on demo\'ed sites to provide useful information to the visitor. This will be dispalyed in the admin area only.', $this->domain),
+		            'conditions' => array(
+		            	array(
+		            		array(
+		            			'id' => 'url',
+		            			'type' => 'required'
+		            		)
+		            	)
+		            ),
+		        ),
+		    )
+		);
+		$this->sections['demo_request_settings'] = array(
+		    'dash_icon' => 'plus-alt',
+		    'title' =>  __('Demo Request Settings', $this->domain),
+		    'description' => __('These are the demo request settings for Fluent Demo.', $this->domain),
+		    'context' => 'normal',
+		    'priority' => 'high',
+		    'fields' => array(
+		    	'enable_request' => array(
+		            'type' => 'radio',
+		            'title' => __('Enable Demo Creation Request', $this->domain),
+		            'sub_title' => __('', $this->domain),
+		            'description' => __('Enable the request a demo button and unique demo creation.', $this->domain),
+		            'options' => array('no' => __('No', $this->domain),'yes' => __('Yes', $this->domain)),
+		            'default' => 'no'
+		        ),
+		        'newsletter' => array(
+		            'type' => 'radio',
+		            'title' => __('Newsletter Signup', $this->domain),
+		            'sub_title' => __('', $this->domain),
+		            'description' => __('Enabling the newsletter box will allow you to submit requests on signup to any newsletter software.', $this->domain),
+		            'options' => array('no' => __('No', $this->domain),'yes' => __('Yes', $this->domain)),
+		            'default' => 'no',
+		            'conditions' => array(
+		            	array(
+		            		array(
+		            			'id' => 'enable_request',
+		            			'value' => 'yes'
+		            		)
+		            	)
+		            ),
+		        ),
+		        'newsletter_text' => array(
+		            'type' => 'text',
+		            'title' => __('Newsletter Signup Text', $this->domain),
+		            'sub_title' => __('', $this->domain),
+		            'description' => __('Enter the text you want to display next to the newsletter checkbox.', $this->domain),
+		            'options' => array('no' => __('No', $this->domain),'yes' => __('Yes', $this->domain)),
+		            'default' => __('Would you like to signup to our newsletter?', $this->domain),
+		            'conditions' => array(
+		            	array(
+		            		array(
+		            			'id' => 'newsletter',
+		            			'value' => 'yes'
+		            		)
+		            	)
+		            ),
+		        ),
+		        'newsletter_url' => array(
+		            'type' => 'text',
+		            'title' => __('Newsletter POST URL', $this->domain),
+		            'sub_title' => __('', $this->domain),
+		            'description' => __('Enter the url where you want the data sent if they choose to signup.', $this->domain),
+		            'conditions' => array(
+		            	array(
+		            		array(
+		            			'id' => 'newsletter',
+		            			'value' => 'yes'
+		            		)
+		            	)
+		            ),
+		        ),
+		        'newsletter_fields' => array(
+		            'type' => 'group',
+		            'title' => __('Newsletter POST Fields', $this->domain),
+		            'multiple' => true,
+		            'description' => __('Enter as many post fields as you need to send to the newsletter signup. You can use the <code>[first_name]</code>, <code>[last_name]</code>, <code>[email]</code> shortcodes to populate fields dynamically.', $this->domain),
+		            'conditions' => array(
+		            	array(
+		            		array(
+		            			'id' => 'newsletter',
+		            			'value' => 'yes'
+		            		)
+		            	)
+		            ),
+		            'fields' => array(
+		            	'field' => array(
+				            'type' => 'text',
+				            'title' => __('Field', $this->domain),
+				        ),
+				        'value' => array(
+				            'type' => 'text',
+				            'title' => __('Value', $this->domain),
+				        ),
+		            ),
+		        ),
+		    )
+		);
+	}
+
+	/**
+      * Creates the args for the global settings
+      *
+      * @since 1.0.0
+      *
+      * @return none
+      *
+      */
+	private function setup_page_args(){
+		$this->page_args = array(
+		    'option_name' => 'fluent_demo_settings',
+		    'page_args' => array(
+		        'slug' => 'fluent-demo-settings',//the unique slug of the page
+		        'menu_title' => __( 'Settings', $this->domain),//the title in the sidebar menu of the page
+		        'page_title' => __( 'Fluent Demo Settings', $this->domain ),//the page title when rendered
+		        'menu_icon' => 'dashicons-welcome-view-site',//the dash icon or url to image icon for use in the menu (only for top level pages)
+		        'parent' => 'edit.php?post_type=demo',
+		    )
+	    );
+	}
+
+}

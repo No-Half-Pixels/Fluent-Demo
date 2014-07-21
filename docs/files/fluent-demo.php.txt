@@ -1,0 +1,80 @@
+<?php
+/*
+Plugin Name: Fluent Demo
+Plugin URI: http://no-half-pixels.github.io/Fluent-Demo/
+Description: Fluent Demo is a WordPress Plugin to enable a demo multisite network for plugins and themes.
+Author: No Half Pixels Ltd
+Version: 1.0.0
+Author URI: http://nohalfpixels.com
+Text Domain: fluent-demo
+Network: false
+*/
+/**
+ * Fluent Demo fluent-demo.php (root file).
+ *
+ * This is the main bootstrap file for the plugin.
+ * Its job is to bootstrap the class files.
+ *
+ * @package Fluent Demo
+ * @since 1.0.0
+ * @version 1.0.0
+ */
+
+/**
+ * Define fluent demo base path - needed for loading classes.
+ */
+define( 'FLUENT_DEMO_FILE', __FILE__ );
+
+/**
+ * Define path to fluent demo resources. Needed for loading assets.
+ */
+define( 'FLUENT_DEMO_URL', plugins_url( '/', FLUENT_DEMO_FILE ));
+
+//setup cron on any type of site
+add_action('wp', 'register_fluent_demo_hourly');
+function register_fluent_demo_hourly(){
+	if ( ! wp_next_scheduled( 'fluent_demo_hourly' ) ) {
+		wp_schedule_event( time(), 'hourly', 'fluent_demo_hourly');
+	}
+}
+
+//require the fluent framework
+include_once(dirname(FLUENT_DEMO_FILE) . '/includes/fluent-framework/fluent-framework.php');
+Fluent_Base::$url = FLUENT_DEMO_URL . 'includes/fluent-framework/';
+
+//require the main class files
+include_once(dirname(FLUENT_DEMO_FILE) . '/classes/class.fluent-demo-base.php');
+
+//we need to do this here for "demo" sites and not load the pages and options on them.
+$options = get_option('fluent_demoed');
+if(!empty($options)){
+	include_once(dirname(FLUENT_DEMO_FILE) . '/classes/class.fluent-demo-demoed.php');
+	include_once(dirname(FLUENT_DEMO_FILE) . '/classes/class.fluent-demo-admin-bar.php');
+	new Fluent_Demo_Demoed();
+	new Fluent_Demo_Admin_Bar();
+	return;
+}
+
+//we will always need the file system, if we are checking its ok, or if using it
+require_once ABSPATH . '/wp-admin/includes/file.php';
+//require clas files
+include_once(dirname(FLUENT_DEMO_FILE) . '/classes/class.fluent-demo-log.php');
+include_once(dirname(FLUENT_DEMO_FILE) . '/classes/class.fluent-demo.php');
+include_once(dirname(FLUENT_DEMO_FILE) . '/classes/class.fluent-demo-global-options.php');
+include_once(dirname(FLUENT_DEMO_FILE) . '/classes/class.fluent-demo-site-options.php');
+include_once(dirname(FLUENT_DEMO_FILE) . '/classes/class.fluent-demo-post-type.php');
+include_once(dirname(FLUENT_DEMO_FILE) . '/classes/class.fluent-demo-tests.php');
+include_once(dirname(FLUENT_DEMO_FILE) . '/classes/class.fluent-demo-admin-bar.php');
+include_once(dirname(FLUENT_DEMO_FILE) . '/classes/class.fluent-demo-actions.php');
+include_once(dirname(FLUENT_DEMO_FILE) . '/classes/class.fluent-demo-frontend.php');
+
+//run bootstrap class
+new Fluent_Demo;
+
+
+
+
+
+
+
+

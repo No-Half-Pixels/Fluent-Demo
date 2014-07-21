@@ -1,0 +1,65 @@
+<?php
+/**
+ * Fluent Demo class.fluent-demo.php (root class).
+ *
+ * This is the main class file for the plugin
+ * Its job is to create the main bulk of the plugins features.
+ *
+ * @package Fluent Demo
+ * @since 1.0.0
+ * @version 1.0.0
+ */
+/**
+ * Fluent_Demo bootstraps the demo plugin and sets everything up.
+ */
+class Fluent_Demo extends Fluent_Demo_Base{
+
+	/**
+     * @var string $version Class version.
+     */
+    public $version = '1.0.0';
+
+    /**
+     * @var array $messages - messages for use in requests and javascript
+     */
+    public $messages = array();
+
+    /**
+      * Function loaded on class creation
+      *
+      * @since 1.0.0
+      *
+      * @return none
+      *
+      */
+	function __construct(){
+
+		//register global options page
+		new Fluent_Demo_Global_Options();
+
+		//register admin bar class
+		new Fluent_Demo_Admin_Bar();
+
+		//register tests class
+		new Fluent_Demo_Tests();
+
+		if(is_network_admin()){
+			//dont load anything else on network admin to prevent errors
+			return;
+		}
+
+		//register per site options page
+		new Fluent_Demo_Site_Options();
+
+		//register post type and add metaboxes
+		new Fluent_Demo_Post_Type();
+
+		//register actions
+		new Fluent_Demo_Actions();
+
+		//register frontend class
+		new Fluent_Demo_Frontend();
+
+	}
+
+}

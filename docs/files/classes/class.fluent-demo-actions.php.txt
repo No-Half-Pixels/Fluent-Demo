@@ -1,0 +1,144 @@
+<?php
+/**
+ * Fluent Demo Actions class.fluent-demo-actions.php.
+ *
+ * The job of this class is to create/archive delete demos via the admin area.
+ *
+ * @package Fluent Demo
+ * @since 1.0.0
+ * @version 1.0.0
+ */
+/**
+ * Fluent_Demo_Actions
+ */
+class Fluent_Demo_Actions extends Fluent_Demo_Base{
+
+	/**
+     * @var string $version Class version.
+     */
+    public $version = '1.0.0';
+
+    /**
+    * @var string $post_id store the post id on publish post action to use in shutdown function.
+    */
+    private $post_id = null;
+
+    public function __construct(){
+    	add_action('fluent_demo_hourly', $this->provide('demo_cleanup'));
+
+    	add_action('wp_trash_post', $this->provide('archive_blog'));
+
+    	add_action('trash_to_publish', $this->provide('unarchive_blog'));
+
+    	add_action('before_delete_post', $this->provide('delete_blog'));
+
+        add_filter('manage_sites_action_links', $this->provide('site_actions'), 10, 3);
+
+        add_action( 'transition_post_status', $this->provide('signup_user'), 10, 3 );
+
+    }
+
+    public function demo_cleanup(){
+    	$curr_id = wp_get_current_blog_id();
+    	$sites = wp_get_sites(array('limit' => 10000));
+    	$opts = get_site_option('fluent_demo');
+    	$deleted_time = strtotime('-'.$opts['garbage_collection'].' hours');
+		foreach($sites as $k => $site){
+			switch_to_blog($site['blog_id']);
+			$option = get_option('fluent_demoed', false);
+			if($options){
+				$post_id = $options['post_id'];
+				switch_to_blog($options['from_blog']);
+				$post = get_post($post_id);
+				$last_updated = strtotime($post->post_modified);
+				if($last_updated < $delete_time){
+					wp_trash_post($post_id);
+				}
+			}
+		}
+		switch_to_blog($curr_id);
+    }
+
+    public function archive_blog($post_id){
+    	if(get_post_type($post_id) == 'demo'){
+    		$meta = get_post_meta($post_id, 'fluent_demo_blog_id', true);
+    		if(!$meta || !get_blog_details($meta)){
+    			return;
+    		}
+    		update_archived( $meta, true );
+    	}
+    }
+
+    public function unarchive_blog($post){
+    	$post_id = $post->ID;
+    	if(get_post_type($post_id) == 'demo'){
+    		$meta = get_post_meta($post_id, 'fluent_demo_blog_id', true);
+    		if(!$meta || !get_blog_details($meta)){
+                return;
+            }
+    		update_archived( $meta, false );
+    	}
+    }
+
+    public function delete_blog($post_id){
+    	if(get_post_type($post_id) == 'demo'){
+    		$meta = get_post_meta($post_id, 'fluent_demo_blog_id', true);
+    		if(!$meta || !get_blog_details($meta)){
+    			return;
+    		}
+    		if(!function_exists('wpmu_delete_blog')){
+    			require_once(ABSPATH . 'wp-admin/includes/ms.php');
+    		}
+    		wpmu_delete_blog($meta, true);
+    	}
+    }
+
+    public function site_actions($actions, $blog_id, $blog_name){
+        $opts = get_blog_option($blog_id, 'fluent_demo_settings');
+        if(isset($opts['enabled']) && $opts['enabled'] == 'yes'){
+            $actions['demo'] = '<span class="demo"><a href="'.get_admin_url($blog_id).'post-new.php?post_type=demo">'.__('Create Demo', $this->domain).'</a></span>';
+        }
+        return $actions;
+    }
+
+    public function signup_user($new_status, $old_status, $post){
+        if($new_status != 'publish'){
+            return;
+        }
+        $post_type = get_post_type($post->ID);
+        $meta = get_post_meta($post->ID, 'fluent_demo_blog_id', true);
+        if($post_type != 'demo' || $meta != false){
+            return;
+        }
+        $this->post_id = $post->ID;
+        $meta = get_post_meta($post->ID, 'fluent_demo_meta', true);
+        $user_signup = (isset($meta['newsletter']) && $meta['newsletter'] == 'yes') ? true : false;
+        $user_first_name = $meta['first_name'];
+        $user_last_name = $meta['last_name'];
+        $user_email = $meta['email'];
+        if($user_signup){
+            $opts = get_option('fluent_demo_settings');
+            if($opts['newsletter'] == 'yes'){
+                $url = $opts['newsletter_url'];
+                if(!empty($opts['newsletter_fields'])){
+                    $post_data = array();
+                    foreach($opts['newsletter_fields'] as $field){
+                        $post_data[$field['field']] = str_replace(array('[email]', '[first_name]', '[last_name]'), array($user_email, $user_first_name, $user_last_name), $field['value']);
+                    }
+                    $response = wp_remote_post( $url, array(
+                        'method' => 'POST',
+                        'timeout' => 45,
+                        'redirection' => 5,
+                        'httpversion' => '1.0',
+                        'blocking' => true,
+                        'headers' => array(),
+                        'body' => $post_data,
+                        'cookies' => array()
+                        )
+                    );
+                }
+            }
+        }
+    }
+    
+}

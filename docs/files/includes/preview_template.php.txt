@@ -1,0 +1,95 @@
+<?php $data = Fluent_Demo_Template::getInstance();?>
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <title><?php echo $data->title;?> | <?php echo $data->company_name;?></title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0" />
+        <?php wp_print_styles(array('fluent-demo-css'));?>
+        <style type="text/css">
+        #demo-carousel .item:hover,
+        .accent-color{
+            color: <?php echo $data->accent_color;?>;
+        }
+        header a.actions:hover,
+        header a.actions.active,
+        .accent-bg{
+            background: <?php echo $data->accent_color;?>;
+        }
+        <?php echo $data->custom_css;?>
+        </style>
+        <?php if($data->break_out == 'yes'){?>
+            <script type="text/javascript">
+                if (top.location!= self.location) {
+                    top.location = self.location.href
+                }
+            </script>
+        <?php }?>
+    </head>
+    <body>
+    <!--<?php print_r($data);?>-->
+
+        <!-- Header -->
+        <header>
+            <a href="<?php echo $data->company_url;?>" id="selector" title="<?php echo $data->company_name;?>" class="demo-title accent-color">
+                <?php if($data->logo != ''){?><img src="<?php echo $data->logo;?>"/><?php }?>
+                <span class="title"><?php echo $data->title;?></span>
+                <span class="dashicons dashicons-arrow-down accent-color">&nbsp;</span>
+            </a>
+            <a href="#" class="actions remove-frame" title="<?php echo __('Remove This Frame', 'fluent-demo');?>"><span class="dashicons dashicons-no">&nbsp;</span></a>
+            <a href="<?php echo $data->url;?>" class="actions purchase" title="<?php echo __('Download/Purchase This Item', 'fluent-demo');?>"><span class="dashicons dashicons-cart">&nbsp;</span></a>
+            <?php if($data->enable_responsive == 'yes'){?>
+                <a href="#" class="actions width" data-width="480px" title="<?php echo __('View As Smartphone', 'fluent-demo');?>"><span class="dashicons dashicons-smartphone">&nbsp;</span></a>
+                <a href="#" class="actions width" data-width="768px" title="<?php echo __('View As Tablet', 'fluent-demo');?>"><span class="dashicons dashicons-tablet">&nbsp;</span></a>
+                <a href="#" class="actions width" data-width="100%" title="<?php echo __('View As Desktop', 'fluent-demo');?>"><span class="dashicons dashicons-desktop">&nbsp;</span></a>
+            <?php }?>
+            <?php if($data->enable_request == 'yes'){?><a href="#" class="actions request-demo" title="<?php echo __('Request Demo', 'fluent-demo');?>"><span class="dashicons dashicons-welcome-view-site">&nbsp;</span><span class="demo-text"> <?php echo __('Request Demo', 'fluent-demo');?></span></a><?php }?>
+        </header>
+
+        <section class="accent-bg">
+        <div id="demo-carousel" class="owl-carousel owl-theme" data-start-position="<?php echo $data->slider_position;?>">
+        <?php 
+        foreach($data->sites as $demo){
+            echo '<div class="item" onclick="window.location.href = \''.$demo['site_url'].'\';">';
+            echo '<img src="'.$demo['screenshot'].'" alt="testing"/>';
+            echo '<div class="title">'.$demo['title'].'</div>';
+            echo '</div>';
+        }
+        ?>
+		</div>
+		 
+		<nav>
+		  <a class="prev" href="#" title="<?php echo __('Previous', 'fluent-demo');?>"><span class="dashicons dashicons-arrow-left-alt2">&nbsp;</span></a>
+		  <a class="next" href="#" title="<?php echo __('Next', 'fluent-demo');?>"><span class="dashicons dashicons-arrow-right-alt2">&nbsp;</span></a>
+		</nav>
+    
+        </section>
+        <iframe class="frame" frameborder="0" border="0" src="<?php echo site_url();?>" style="width: 100%;"></iframe>
+
+
+
+        <div id="backdrop"></div>
+        <div id="modal">
+        	<div id="modal-header"><span><?php echo __('Request a Demo of ', 'fluent-demo') . $data->title;?></span><a href="#" title="<?php echo __('Close', 'fluent-demo');?>"><span class="dashicons dashicons-no">&nbsp;</span></a></div>
+        	<div id="modal-body">
+                <div id="responses"></div>
+        		<div class="description"><?php echo do_shortcode($data->request_text);?></div>
+        		<form action="<?php echo admin_url('admin-ajax.php');?>" method="post">
+                    <?php wp_nonce_field('fluent-demo-request');?>
+                    <input type="hidden" name="action" value="fluent-demo-request"/>
+                    <input type="hidden" name="blog_id" value="<?php echo get_current_blog_id();?>"/>
+	        		<input type="text" name="first-name" id="first-name" value="" placeholder="<?php echo __('First Name', 'fluent-demo');?>"/>
+	        		<input type="text" name="last-name" id="last-name" value="" placeholder="<?php echo __('Last Name', 'fluent-demo');?>"/>
+	        		<input type="email" name="email" id="email" value="" placeholder="<?php echo __('Email', 'fluent-demo');?>"/>
+                    <?php if($data->newsletter == 'yes'){
+                        echo '<label id="newsletter-label" for="newsletter"><input type="checkbox" name="newsletter" id="newsletter" value="yes"/> '.$data->newsletter_text.'</label>';
+                    }?>
+	        		<input type="submit" name="submit" id="submit" class="accent-bg" value="<?php echo __('Request Demo', 'fluent-demo');?>"/>
+        		</form>
+        	</div>
+        </div>
+
+
+        <?php wp_print_scripts(array('fluent-demo-js'));?>
+    </body>
+</html>

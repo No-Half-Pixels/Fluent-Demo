@@ -1,0 +1,278 @@
+<?php
+/**
+ * Fluent Demo Frontend class.fluent-demo-frontend.php.
+ *
+ * The job of this class is to display and proccess the demo site on the frontend.
+ *
+ * @package Fluent Demo
+ * @since 1.0.0
+ * @version 1.0.0
+ */
+
+/**
+ * Fluent_Demo_Frontend
+ */
+class Fluent_Demo_Frontend extends Fluent_Demo_Base{
+
+	/**
+	* @var string $version Class version.
+	*/
+	public $version = '1.0.0';
+
+	/**
+	* Function loaded on class creation
+	*
+	* @since 1.0.0
+	*
+	* @return none
+	*
+	*/
+	function __construct(){
+		$this->messages = array(
+			'missing_demo_id' => __('Missing Demo ID.', $this->domain),
+			'missing_first_name' => __('You must enter your first name.', $this->domain),
+			'missing_last_name' => __('You must enter your last name.', $this->domain),
+			'missing_email' => __('You must enter your email address.', $this->domain),
+			'invalid_email' => __('You must enter a valid email address.', $this->domain),
+			'unknown_error' => __('An unknown error occured.', $this->domain),
+			'security_error' => __('Security validation failed, please refresh and try again.', $this->domain),
+			'blog_not_found' => __('Demo not found.', $this->domain),
+			'limit_reached' => __('The current demonstration limit has been reached, please try again in a few hours.', $this->domain),
+			'create_success' => __('Your demo has been created.', $this->domain),
+			'request_success' => __('Your demo request has been sent.', $this->domain)
+		);
+
+		//register on init as we arent using wp_head for this plugin
+		add_action('init', $this->provide('register_assets'));
+
+		//render the demo when preview is in the url
+		add_action('template_include', $this->provide('render_demo'));
+
+		//proccess demo requests
+		add_action( 'wp_ajax_fluent-demo-request', $this->provide('request_demo') );
+		add_action( 'wp_ajax_nopriv_fluent-demo-request', $this->provide('request_demo') );
+	}
+
+	
+	/**
+      * Register assets for use on the rendered template
+      *
+      * Called on init as we dont use wp_head(); in the template so cannot be registered on wp_enqueue_scripts action. (works because its during init and not before).
+      *
+      * @uses wp_register_style();
+      * @uses wp_register_script();
+      * @uses plugins_url();
+      *
+      * @since 1.0.0
+      *
+      * @return none
+      *
+      */
+	public function register_assets(){
+		wp_register_style( 'google-open-sans', '//fonts.googleapis.com/css?family=Open+Sans:400,700,800,300', array(), $this->version);
+		wp_register_style( 'owl-carousel', plugins_url('assets/vendor/owl2/assets/owl.carousel.css', FLUENT_DEMO_FILE), array(), $this->version);
+		wp_register_style( 'fluent-demo-css', plugins_url('assets/css/style.min.css', FLUENT_DEMO_FILE), array('dashicons', 'google-open-sans', 'owl-carousel'), $this->version);
+		wp_register_script( 'owl-carousel', plugins_url('assets/vendor/owl2/owl.carousel.min.js', FLUENT_DEMO_FILE), array('jquery'), $this->version);
+		wp_register_script( 'fluent-demo-js', plugins_url('assets/js/demo.min.js', FLUENT_DEMO_FILE), array('owl-carousel'), $this->version);
+		wp_localize_script('fluent-demo-js', 'fluent_demo_messages', $this->messages);
+		wp_localize_script('fluent-demo-js', 'fluent_demo_support', array(
+			'loading_gif' => admin_url('images/spinner-2x.gif')
+		));
+	}
+
+	/**
+      * Renders/includes the page template for the demo if conditions are met (not admin and url contains ?preview).
+      *
+      * @uses get_option();
+      * @uses wp_get_sites();
+      * @uses is_admin();
+      * @uses get_current_blog_id();
+      * @uses wp_get_attachment_image_src();
+      * @uses switch_to_blog();
+      *
+      * @var string $template the supplied template path
+      *
+      * @since 1.0.0
+      *
+      * @return $template
+      *
+      */
+	public function render_demo($template){
+		if(is_admin() || !isset($_GET['preview'])){
+			return $template;
+		}
+		$options = get_option('fluent_demo_settings');
+		if($options['enabled'] != 'yes'){
+			return $template;
+		}
+
+		//require supporting classes/files.
+		include_once(dirname(FLUENT_DEMO_FILE) . '/classes/class.fluent-demo-template.php');
+
+		$values = Fluent_Demo_Template::getInstance();
+		$values->current_blog = get_current_blog_id();
+
+		$values->global_options = get_site_option('fluent_demo');
+		foreach($values->global_options as $key => $value){
+			$values->{$key} = $value;
+		}
+		//get logo url before switching again
+		switch_to_blog(1);
+		$img = wp_get_attachment_image_src( $values->logo, 'medium' );
+		$values->logo = $img[0];
+		restore_current_blog();
+
+		//get site settings
+		$sites = wp_get_sites(array('limit' => 10000));
+		$priorities = array();
+		foreach($sites as $k => $site){
+			switch_to_blog($site['blog_id']);
+			//per site options
+			$opts = get_option('fluent_demo_settings');
+			//dont show if its not enabled, or its a demoed site
+			if(!isset($opts['enabled']) || $opts['enabled'] != 'yes' || is_array(get_option('fluent_demoed', false))){
+				continue;
+			}
+			if($site['blog_id'] == $values->current_blog){
+				$values->slider_position = $k;
+				foreach($opts as $key => $value){
+					$values->{$key} = ($value == '' && isset($values->{$key}) && $values->{$key} != '') ? $values->{$key} : $value;
+				}
+			}
+			$img = wp_get_attachment_image_src($opts['screenshot'], 'large');
+			$opts['screenshot'] = $img[0];
+			if($opts['enabled'] == 'yes'){
+				$priorities[$opts['priority']][] = $opts + array('id' => $site['blog_id'], 'site_url' => site_url('?preview'));
+			}
+		}
+		ksort($priorities);
+		$values->sites = array();
+		foreach($priorities as $priority => $sites){
+			foreach($sites as $site){
+				$values->sites[] = $site;
+			}
+		}
+		switch_to_blog($values->current_blog);
+		return apply_filters('fluent/demo/preview/template/location', dirname(FLUENT_DEMO_FILE) . '/includes/preview_template.php');
+	}
+
+	/**
+      * Ajax function to proccess the front end demo request
+      *
+      * @uses wp_verify_nonce();
+      * @uses Fluent_Demo::request_demo_proccess();
+      *
+      * @since 1.0.0
+      *
+      * @return none
+      *
+      */
+	public function request_demo(){
+
+		//not our action
+		if(!isset($_POST['action']) || $_POST['action'] != 'fluent-demo-request'){
+            die(-1);
+            return;
+        }
+
+        //die with nonce error
+        if(!wp_verify_nonce($_POST['_wpnonce'], 'fluent-demo-request')){
+        	echo json_encode(array(
+        		'status' => 406,
+        		'messages' => array(
+        			$this->messages['security_error']
+        		)
+        	));
+        	die();
+        }
+
+        $options = get_option('fluent_demo_settings');
+		if($options['enabled'] != 'yes'){
+			echo json_encode(array(
+        		'status' => 406,
+        		'messages' => array(
+        			$this->messages['security_error']
+        		)
+        	));
+        	die();
+		}
+
+        //include creator class
+        include_once(dirname(FLUENT_DEMO_FILE) . '/classes/class.fluent-demo-creator.php');
+
+        $action = (isset($_POST['action2'])) ? $_POST['action2'] : 'request';
+        switch($action){
+        	case 'request':
+		        //die with missing/errored values error
+		        if(!isset($_POST['first-name']) || $_POST['first-name'] == '' || !isset($_POST['last-name']) || $_POST['last-name'] == '' || !isset($_POST['email']) || $_POST['email'] == '' || !is_email($_POST['email']) || !isset($_POST['blog_id']) || $_POST['blog_id'] == '' || get_blog_details(array('blog_id' => esc_attr($_POST['blog_id']))) === false){
+		        	$messages = array();
+		        	if(!isset($_POST['blog_id']) || $_POST['blog_id'] == ''){
+		        		$messages[] = $this->messages['missing_demo_id'];
+		        	}
+		        	if(get_blog_details(array('blog_id' => esc_attr($_POST['blog_id']))) === false){
+		        		$messages[] = $this->messages['blog_not_found'];
+		        	}
+		        	if(!isset($_POST['first-name']) || $_POST['first-name'] == ''){
+		        		$messages[] = $this->messages['missing_first_name'];
+		        	}
+		        	if(!isset($_POST['last-name']) || $_POST['last-name'] == ''){
+		        		$messages[] = $this->messages['missing_last_name'];
+		        	}
+		        	if(!isset($_POST['email']) || $_POST['email'] == ''){
+		        		$messages[] = $this->messages['missing_email'];
+		        	}
+		        	if(!is_email($_POST['email'])){
+		        		$messages[] = $this->messages['invalid_email'];
+		        	}
+		        	echo json_encode(array(
+		        		'status' => 404,
+		        		'messages' => $messages
+		        	));
+		        	die();
+		        }
+
+		        //proccess request and send result
+		        $signup = (isset($_POST['newsletter'])) ? $_POST['newsletter'] : false;
+		        $status = Fluent_Demo_Creator::request_demo($_POST['email'], $_POST['first-name'], $_POST['last-name'], $signup);
+				if($status){
+					echo json_encode(array(
+			    		'status' => 200,
+			    		'request_id' => $status,
+			    		'messages' => array(
+			    			$this->messages['request_success']
+			    		)
+				    ));
+			    	die();
+				}
+    		break;
+    		case 'proccess':
+    			Fluent_Demo_Creator::proccess_demo_from_id($_POST['request_id']);
+    			echo json_encode(array(
+		    		'status' => 200,
+		    		'messages' => ''
+		    	));
+		    	die();
+    		break;
+    		case 'status':
+    			$errored = get_post_meta($_POST['request_id'], 'demo_create_failed', true);
+    			if(is_array($errored)){
+    				echo json_encode(array(
+			    		'status' => 500,
+			    		'messages' => $errored
+			    	));
+			    	die();
+    			}
+    			$status = get_post_meta($_POST['request_id'], 'fluent_demo_status', true);
+    			$status['status'] = 200;
+    			echo json_encode($status);
+		    	die();
+    		break;
+    	}
+    	//if were here something went wrong
+    	echo json_encode(array(
+    		'status' => 500,
+    		'messages' => $this->messages['unknown_error']
+    	));
+    	die();
+	}
+}

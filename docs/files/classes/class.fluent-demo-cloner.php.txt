@@ -1,0 +1,400 @@
+<?php
+/**
+ * Fluent Demo Cloner class.fluent-demo-cloner.php.
+ *
+ * This class will clone 1 blog to another.
+ *
+ * @package Fluent Demo
+ * @since 1.0.0
+ * @version 1.0.0
+ */
+/**
+ * Fluent_Demo_Cloner.
+ */
+class Fluent_Demo_Cloner extends Fluent_Base{
+
+	/**
+     * @var array $args holds the data passed to the class.
+     */
+	public $args = array();
+
+  /**
+   * @var array $args holds the data passed to the class.
+   */
+  private $error_codes = array(
+    1 => 'firstname',
+    2 => 'lastname',
+    3 => 'email',
+    4 => 'invalidemail',
+    5 => 'notfound',
+    6 => 'limitreached',
+    7 => 'unknown'
+  );
+
+	/**
+    * Function used to get the class instance
+    *
+    * @since 1.0.0
+    *
+    */
+  public function __construct($blog_id = null, $first_name = null, $last_name = null, $email = null) {
+    $this->args['blog_id'] = $blog_id;
+    $this->args['first_name'] = $first_name;
+    $this->args['last_name'] = $last_name;
+    $this->args['email'] = $email;
+
+    //need to address
+    $this->args['admin_user'] = 1;
+  }
+
+  /**
+    * Helper function to check a blog can be cloned
+    *
+    * @since 1.0.0
+    *
+    * @return mixed true on success, integar error code on failure
+    *
+    */
+  public function validate_details(){
+
+    if(!isset($this->args['first_name']) || $this->args['first_name'] == ''){
+      return new WP_Error( 404, __('You must enter your first name.', $this->domain) );
+    }
+    if(!isset($this->args['last_name']) || $this->args['last_name'] == ''){
+      return new WP_Error( 404, __('You must enter your last name.', $this->domain) );
+    }
+    if(!isset($this->args['email']) || $this->args['email'] == ''){
+      return new WP_Error( 404, __('You must enter your email address.', $this->domain) );
+    }
+    if(!is_email($this->args['email'])){
+      return new WP_Error( 404, __('You must enter a valid email address.', $this->domain) );
+    }
+    if(!isset($this->args['blog_id']) || $this->args['blog_id'] == '' || get_blog_details(array('blog_id' => esc_attr($this->args['blog_id']))) === false){
+      return new WP_Error( 404, __('Demo Not Found', $this->domain) );
+    }
+
+    //get demo details
+    switch_to_blog($this->args['blog_id']);
+    $options = get_option('fluent_demo_settings');
+    if($options['enable_request'] != 'yes'){
+      return new WP_Error( 404, __('Demo No Found.', $this->domain) );
+    }
+    if(!isset($options['maximum_demos']) || $options['maximum_demos'] == ''){
+      $opt = get_site_option('fluent_demo');
+      $options['maximum_demos'] = (isset($opt['maximum_demos']) && $opt['maximum_demos'] != '') ? $opt['maximum_demos'] : 0;
+    }
+
+    restore_current_blog();
+
+    //check for blog limits
+    $meta = get_option('fluent_demo_data');
+    if($options['maximum_demos'] != '0' && count($meta['active']) >= $options['maximum_demos']){
+      return new WP_Error( 404, __('The current demonstration limit has been reached, please try again in a few hours.', $this->domain) );
+    }
+
+    return true;
+  }
+
+  /**
+    * Clones the current set blog to a new destination
+    *
+    * @since 1.0.0
+    *
+    * @return mixed true on success, integar error code on failure
+    *
+    */
+  public function clone_blog(){
+
+    $this->set_paths();
+
+    if(!$this->maybe_create_user()){
+      return new WP_Error(500, __('Cannot create or fetch user.', $this->domain));
+    }
+
+    $result = $this->create_blog();
+    if(is_wp_error($result)){
+      return $result;
+    }
+    add_user_to_blog($this->args['new_blog_id'], $this->args['user']->ID, 'editor');
+    $this->clone_data();
+    $this->copy_blog_files();
+    $this->replace_content_urls();
+
+    $this->mark_as_cloned();
+
+    return array(
+      'status' => 200,
+      'messages' => array(
+        __('Your demo has been created.', $this->domain)
+      ),
+      'activated' => true,
+      'location' => get_admin_url($this->args['new_blog_id']),
+      'text' => __('Demo created please wait while we direct you.', $this->domain)
+    );
+  }
+
+  /**
+    * Sets the domain and paths depending on if its a subdomain or folder based network
+    *
+    * @uses is_subdomain_install();
+    * @uses trailingslashit();
+    *
+    * @since 1.0.0
+    *
+    * @return none
+    *
+    */
+  private function set_paths(){
+    global $current_site, $base;
+    $this->args['domainstring'] = md5($this->args['email'].time().$this->args['first_name']);
+    if( is_subdomain_install() ) {
+      $this->args['newdomain'] = $this->args['domainstring'].".".$current_site->domain;
+      $this->args['path'] = $base;
+    } else {
+      $this->args['newdomain'] = $current_site->domain;
+      $this->args['path'] = trailingslashit($base).trailingslashit($this->args['domainstring']);
+    }
+  }
+
+  /**
+    * Creates or fetches the user by email and attaches the WP_User object to a class argument.
+    *
+    * @uses username_exists();
+    * @uses email_exists();
+    * @uses wp_generate_password();
+    * @uses up_create_user();
+    * @uses update_user_meta();
+    * @uses remove_user_from_blog();
+    *
+    * @since 1.0.0
+    *
+    * @return boolean true on success, false on failure
+    *
+    */
+  private function maybe_create_user(){
+    if(!username_exists($this->args['email'])){
+      if(email_exists($this->args['email'])){
+        $user_name = $this->args['email'].time();
+      }else{
+        $user_name = $this->args['email'];
+      }
+      $this->args['new_password'] = wp_generate_password();
+      $id = wp_create_user($user_name, $this->args['new_password'], $this->args['email']);
+      if(!is_wp_error($id)){
+        $this->args['user'] = get_user_by('id', $id);
+        update_user_meta( $id, 'first_name', $this->args['first_name'] );
+        update_user_meta( $id, 'last_name', $this->args['last_name'] );
+        remove_user_from_blog($id, get_current_blog_id());
+      }
+    }else{
+      $this->args['user'] = get_user_by('login', $this->args['email']);
+    }
+    if($this->args['user'] instanceof WP_User){
+      return true;
+    }
+    return false;
+  }
+
+  /**
+    * Actually creates the demo site
+    *
+    * @uses get_blog_details();
+    * @uses wpmu_create_blog();
+    *
+    * @since 1.0.0
+    *
+    * @return mixed new blog id on success, WP_Error object on failure
+    *
+    */
+  private function create_blog(){
+    global $wpdb, $current_site, $base;
+    $wpdb->hide_errors();
+    $blog_details = get_blog_details($this->args['blog_id']);
+    $this->args['new_blog_id'] = wpmu_create_blog( $this->args['newdomain'], $this->args['path'], $blog_details->blogname, $this->args['admin_user'] , array( "public" => 1 ), 1 );
+    $wpdb->show_errors();
+    return $this->args['new_blog_id'];
+  }
+
+  /**
+    * Replaces data and tables in the db after creation to mirror the cloned from site data.
+    *
+    * @uses switch_to_blog();
+    * @uses restore_current_blog();
+    * @uses Fluent_Demo::replace_guid_urls();
+    *
+    * @since 1.0.0
+    *
+    * @return none
+    *
+    */
+  private function clone_data() {
+    global $wpdb, $wp_version;
+
+      $from_blog_prefix = $this->get_blog_prefix( $this->args['blog_id'] );
+      $to_blog_prefix = $this->get_blog_prefix( $this->args['new_blog_id'] );
+      $from_blog_prefix_length = strlen($from_blog_prefix);
+      $to_blog_prefix_length = strlen($to_blog_prefix);
+      $from_blog_escaped_prefix = str_replace( '_', '\_', $from_blog_prefix );
+
+      // Grab key options from new blog.
+      $saved_options = array(
+        'siteurl'=>'',
+        'home'=>'',
+        'upload_path'=>'',
+        'fileupload_url'=>'',
+        'upload_url_path'=>'',
+        'admin_email'=>'',
+        'blogname'=>''
+      );
+      // Options that should be preserved in the new blog.
+      $saved_options = apply_filters('copy_blog_data_saved_options', $saved_options);
+      foreach($saved_options as $option_name => $option_value) {
+        $saved_options[$option_name] = get_blog_option( $this->args['new_blog_id'], $option_name );
+      }
+
+      // Copy over ALL the tables.
+      $query = $wpdb->prepare('SHOW TABLES LIKE %s',$from_blog_escaped_prefix.'%');
+      $old_tables = $wpdb->get_col($query);
+
+      foreach ($old_tables as $k => $table) {
+        $raw_table_name = substr( $table, $from_blog_prefix_length );
+        $newtable = $to_blog_prefix . $raw_table_name;
+
+        $query = "DROP TABLE IF EXISTS {$newtable}";
+        $wpdb->get_results($query);
+
+        $query = "CREATE TABLE IF NOT EXISTS {$newtable} LIKE {$table}";
+        $wpdb->get_results($query);
+
+        $query = "INSERT {$newtable} SELECT * FROM {$table}";
+        $wpdb->get_results($query);
+      }
+
+      // apply key opptions from new blog.
+      switch_to_blog( $this->args['new_blog_id'] );
+      foreach( $saved_options as $option_name => $option_value ) {
+        update_option( $option_name, $option_value );
+      }
+
+      /// fix all options with the wrong prefix...
+      $query = $wpdb->prepare("SELECT * FROM {$wpdb->options} WHERE option_name LIKE %s",$from_blog_escaped_prefix.'%');
+      $options = $wpdb->get_results( $query );
+      if( $options ) {
+        foreach( $options as $option ) {
+          $raw_option_name = substr($option->option_name,$from_blog_prefix_length);
+          $wpdb->update( $wpdb->options, array( 'option_name' => $to_blog_prefix . $raw_option_name ), array( 'option_id' => $option->option_id ) );
+        }
+        wp_cache_flush();
+      }
+
+      // Fix GUIDs on copied posts
+      $this->replace_guid_urls();
+
+      restore_current_blog();
+  }
+
+  /**
+    * Gets a blog prefix from the database
+    *
+    * @var $blog_id - the blog id to fetch the prefix for
+    *
+    * @since 1.0.0
+    *
+    * @return string $prefix
+    *
+    */
+  private function get_blog_prefix( $blog_id ) {
+    global $wpdb;
+    if( is_callable( array( &$wpdb, 'get_blog_prefix' ) ) ) {
+      $prefix = $wpdb->get_blog_prefix( $blog_id );
+    } else {
+      $prefix = $wpdb->base_prefix . $blog_id . '_';
+    }
+    return $prefix;
+  }
+
+  /**
+    * Replace guids in the new demo left over by the last tool.
+    *
+    * @since 1.0.0
+    *
+    * @return mixed true on success, integar error code on failure
+    *
+    */  
+  private function replace_guid_urls() {
+      global $wpdb;
+      $to_blog_prefix = $this->get_blog_prefix( $this->args['new_blog_id'] );
+      $from_blog_url = get_blog_option( $this->args['blog_id'], 'siteurl' );
+      $to_blog_url = get_blog_option( $this->args['new_blog_id'], 'siteurl' );
+      $query = $wpdb->prepare( "UPDATE {$to_blog_prefix}posts SET guid = REPLACE(guid, '%s', '%s')", $from_blog_url, $to_blog_url );
+      $wpdb->query( $query );
+    }
+
+    /**
+      * Copy the clone blog files to the cloned blog folder and make it sure it all matches up
+      *
+      * need to use wordpress copy_dir over this
+      *
+      * @since 1.0.0
+      *
+      * @return none
+      *
+      */
+    private function copy_blog_files() {
+      set_time_limit( 2400 ); // 60 seconds x 10 minutes
+      @ini_set('memory_limit','2048M');
+
+      // Path to source blog files.
+      switch_to_blog($this->args['blog_id']);
+      $dir_info = wp_upload_dir();
+      $from = str_replace(' ', "\\ ", trailingslashit($dir_info['basedir']).'*'); // * necessary with GNU cp, doesn't hurt anything with BSD cp
+      restore_current_blog();
+
+      // Path to destination blog files.
+      switch_to_blog($this->args['new_blog_id']);
+      $dir_info = wp_upload_dir();
+      $to = str_replace(' ', "\\ ", trailingslashit($dir_info['basedir']));
+      restore_current_blog();
+
+      // Shell command used to copy files.
+      $command = sprintf("cp -Rfp %s %s", $from, $to);
+      exec($command);
+    }
+
+    /**
+      * Replace any urls within demo blog content with the new ones
+      *
+      * @since 1.0.0
+      *
+      * @return none
+      *
+      */
+    private function replace_content_urls() {
+      global $wpdb;
+      $to_blog_prefix = $this->get_blog_prefix( $this->args['new_blog_id'] );
+      $from_blog_url = get_blog_option( $this->args['blog_id'], 'siteurl' );
+      $to_blog_url = get_blog_option( $this->args['new_blog_id'], 'siteurl' );
+      $query = $wpdb->prepare( "UPDATE {$to_blog_prefix}posts SET post_content = REPLACE(post_content, '%s', '%s')", $from_blog_url, $to_blog_url );
+      $wpdb->query( $query );
+    }
+
+    /**
+      * Mark the cloned blog as clones so we dont load the options page, but do load the notices once we have finishing the clone.
+      *
+      * @uses switch_to_blog();
+      * @uses delete_option();
+      * @uses restore_current_blog();
+      *
+      * @since 1.0.0
+      *
+      * @return none
+      *
+      */
+    private function mark_as_cloned(){
+      switch_to_blog($this->args['new_blog_id']);
+      delete_option('fluent_demo_settings');
+      //deactivate_plugins( plugin_basename( FLUENT_DEMO_FILE ) );
+      update_option('fluent_demo_clone', array('time' => time(), 'user' => $this->args['user']->ID));
+      restore_current_blog();
+    }
+}

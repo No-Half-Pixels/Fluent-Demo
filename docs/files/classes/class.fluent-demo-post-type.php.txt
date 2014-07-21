@@ -1,0 +1,188 @@
+<?php
+/**
+ * Fluent Demo Post Type class.fluent-demo-post-type.php.
+ *
+ * The job of this class is to create the demo post type for use on to be demo'ed sites.
+ *
+ * @package Fluent Demo
+ * @since 1.0.0
+ * @version 1.0.0
+ */
+
+//require our custom fields
+include_once(dirname(FLUENT_DEMO_FILE) . '/includes/class.fluent-demo-user-field.php');
+
+/**
+ * Fluent_Demo_Post_type
+ */
+class Fluent_Demo_Post_Type extends Fluent_Demo_Base{
+
+	/**
+   * @var string $version Class version.
+   */
+  public $version = '1.0.0';
+
+  /**
+   * @var object $post_type The Fluent Framework Post Type object
+   */
+  public $post_type = null;
+
+  /**
+   * @var string $metaboxes_sections - contains all of the sections for the demo metaboxes
+   */
+  private $metaboxes_sections = array();
+
+  /**
+   * @var string $metaboxes_args - contains all of the arguments for the demo metaboxes
+   */
+  private $metaboxes_args = array();
+
+  /**
+   * @var object $metaboxes The Fluent Framework Metabox object
+   */
+  public $metaboxes = null;
+
+  /**
+    * Function loaded on class creation
+    *
+    * @since 1.0.0
+    *
+    * @return none
+    *
+    */
+	function __construct(){
+    //register demo post type
+    $this->post_type = new Fluent_Post_type('Demo', array(
+      'public' => false,
+      'description' => __('Fluent Demo Requests', $this->domain),
+      'show_ui' => true,
+      'menu_icon' => 'dashicons-desktop',
+      'supports' => false,//array('title')
+      'messages' => array(
+        //6 => __('Demo Request Saved. The demo is now being created in the background. You can safely navigate away from this page while the demo is being created.<script>jQuery(document).ready(function(){jQuery.post("'.admin_url('admin-ajax.php').'", {action: "fluent-demo-request",action2: "proccess",request_id: jQuery("#post_ID").val(),_wpnonce: "'.wp_create_nonce('fluent-demo-request').'"});});</script>', $this->domain)
+      )
+    ));
+
+    //we cant use nonces outside of an action so we need to alter the post types static var on an init hook.
+    add_action('init', $this->provide('setup_post_type_messages'), 20);
+
+    //register demo post type metaboxes
+    $this->setup_metaboxes_sections();
+    $this->setup_metaboxes_args();
+    $this->metaboxes = new Fluent_Options_Meta( $this->metaboxes_args, $this->metaboxes_sections);
+
+    //display title properly
+    add_filter('the_title', $this->provide('adjust_demo_title'), 10, 2);
+	}
+
+  /**
+  * Adjust the post published message after init to we can use nonces.
+  *
+  * @since 1.0.0
+  *
+  * @return none
+  *
+  */
+  public function setup_post_type_messages(){
+    Fluent_Post_Type::$post_types['demo']['messages'][6] = __('Demo Request Saved. The demo is now being created in the background. You can safely navigate away from this page while the demo is being created.', $this->domain) . '<script>jQuery(document).ready(function(){jQuery.post("'.admin_url('admin-ajax.php').'", {action: "fluent-demo-request",action2: "proccess",request_id: jQuery("#post_ID").val(),_wpnonce: "'.wp_create_nonce('fluent-demo-request').'"});});</script>';
+  }
+
+  /**
+    * Sets up the metabox sections for demos
+    *
+    * @since 1.0.0
+    *
+    * @return none
+    *
+    */
+  private function setup_metaboxes_sections(){
+    $this->metaboxes_sections['settings'] = array(
+      'dash_icon' => 'admin-generic',
+        'title' =>  __('Demo Details', $this->domain),
+        'description' => __('These are the global settings for Fluent Demo. Each demo site can override certain values if desired.', $this->domain),
+        'context' => 'normal',
+        'priority' => 'high',
+        'fields' => array(
+            'first_name' => array(
+                'type' => 'demo-user',
+                'title' => __('First Name', $this->domain),
+                'placeholder' => __('First Name', $this->domain),
+                'sub_title' => __('', $this->domain),
+                'required' => true,
+                'description' => __('', $this->domain),
+            ),
+            'last_name' => array(
+                'type' => 'demo-user',
+                'title' => __('Last Name', $this->domain),
+                'placeholder' => __('Last Name', $this->domain),
+                'sub_title' => __('', $this->domain),
+                'required' => true,
+                'description' => __('', $this->domain),
+            ),
+            'email' => array(
+                'type' => 'demo-user',
+                'title' => __('Email Address', $this->domain),
+                'placeholder' => __('Email', $this->domain),
+                'sub_title' => __('', $this->domain),
+                'required' => true,
+                'description' => __('', $this->domain),
+            ),
+        ),
+    );
+
+    $opts = get_option('fluent_demo_settings');
+
+    if($opts['newsletter'] == 'yes'){
+      $this->metaboxes_sections['settings']['fields']['newsletter'] = array(
+          'type' => 'checkbox',
+          'title' => __('Newsletter Signup', $this->domain),
+          'sub_title' => __('', $this->domain),
+          'options' => array(
+            'yes' => __('Sign up to newsletter', $this->domain),
+          ),
+      );
+    }
+  }
+
+  /**
+  * Sets up the metabox args for demos
+  *
+  * @since 1.0.0
+  *
+  * @return none
+  *
+  */
+  private function setup_metaboxes_args(){
+    $this->metaboxes_args = array(
+      'option_name' => 'fluent_demo_meta',
+      'post_types' => array(
+        'demo'
+      )
+    );
+  }
+
+  /**
+  * Adjusts the default "AutoDraft" title for demo post type. This only happens because we dont allow the title to be editted, its used to create the demo urls.
+  *
+  * @uses get_post_type();
+  * @uses get_post_meta();
+  * @uses get_post();
+  *
+  * @since 1.0.0
+  *
+  * @return string $title - The modified title.
+  *
+  */
+  public function adjust_demo_title($title = '', $id = null){
+    if(get_post_type($id) != 'demo'){return $title;}
+    $data = get_post_meta($id, 'fluent_demo_meta', true);
+    if(isset($data['email']) && $data['email'] != ''){
+      $post = get_post($id);
+      $title = $post->post_date . ' - ' . $data['email'];
+    }else{
+      $title = $post->post_date;
+    }
+    return $title;
+  }
+
+}

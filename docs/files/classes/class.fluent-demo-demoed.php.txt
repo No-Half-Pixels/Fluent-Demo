@@ -1,0 +1,70 @@
+<?php
+/**
+ * Fluent Demo Demoed class.fluent-demo-demoed.php.
+ *
+ * The job of this class is to setup/monitor demoed sites.
+ *
+ * @package Fluent Demo
+ * @since 1.0.0
+ * @version 1.0.0
+ */
+/**
+ * Fluent_Demo_Demoed
+ */
+class Fluent_Demo_Demoed extends Fluent_Demo_Base{
+
+	/**
+     * @var string $domain Class text domain.
+     */
+    public $version = '1.0.0';
+
+    /**
+     * @var array $meta. The demoed meta information.
+     */
+    public $meta = array();
+
+    /**
+     * @var array $options. The demoed options from cloned blog.
+     */
+    public $options = array();
+
+    public function __construct(){
+    	$this->meta = get_option('fluent_demoed');
+
+        if(!$this->meta){return;}
+    	$this->options = get_blog_option($this->meta['from_blog'], 'fluent_demo_settings', array());
+
+    	//allow auto login
+    	add_action('init', $this->provide('auto_login'));
+
+    	//update post updated time on every admin page load to keep the demo active
+    	add_action('admin_init', $this->provide('updated_time'));
+
+    	//add admin notice
+    	add_action('admin_notices', $this->provide('admin_notice'));
+    }
+
+    public function auto_login(){
+    	if(isset($_GET['action']) && $_GET['action'] == 'fluent-demo-login' && wp_verify_nonce($_GET['_wpnonce'], 'fluent-demo-created-login') && isset($_GET['user_id'])){
+			wp_clear_auth_cookie();
+		    wp_set_current_user ( $_GET['user_id'] );
+		    wp_set_auth_cookie  ( $_GET['user_id'] );
+		    wp_safe_redirect( admin_url() );
+		    exit();
+		}
+    }
+
+    public function updated_time(){
+    	switch_to_blog($this->meta['from_blog']);
+    	global $wpdb;
+    	$wpdb->update($wpdb->posts, array('post_modified' => current_time('mysql'), 'post_modified_gmt' => current_time('mysql', 1)), array('ID' => $this->meta['post_id']));
+    	restore_current_blog();
+    }
+
+    public function admin_notice(){
+    	if(!isset($this->options['admin_notices']) && $this->options['admin_notices'] == ''){return;}
+    	echo '<div class="updated">'.$this->options['admin_notices'].'</div>';
+    }
+
+    
+}

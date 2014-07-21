@@ -1,0 +1,410 @@
+<?php
+/**
+ * Fluent Demo Creator class.fluent-demo-creator.php.
+ *
+ * The job of this class is to create demo sites. period.
+ *
+ * @package Fluent Demo
+ * @since 1.0.0
+ * @version 1.0.0
+ */
+
+/**
+ * Fluent_Demo_Creator
+ */
+class Fluent_Demo_Creator extends Fluent_Demo_Base{
+
+	/**
+	* @var string $version Class version.
+	*/
+	public $version = '1.0.0';
+
+	/**
+	* Function loaded on class creation. Nothing to see here
+	*
+	* @since 1.0.0
+	*
+	* @return none
+	*
+	*/
+	public function __construct(){
+
+	}
+
+	/**
+	* Request a demo Function.
+	*
+	* Creates a demo draft post and adds the details, then returns the id.
+	*
+	* @since 1.0.0
+	*
+	* @return mixed $id. Post id on success, wp_error on failure
+	*
+	*/
+	public static function request_demo($user_email, $user_first_name, $user_last_name, $user_signup = false){
+		$id = wp_insert_post(array(
+			'post_status' => 'draft',
+			'post_type' => 'demo'
+		), true);
+		if(is_wp_error($id)){
+			return false;
+		}
+		add_post_meta($id, 'fluent_demo_meta', array('first_name' => $user_first_name, 'last_name' => $user_last_name, 'email' => $user_email, 'newsletter' => $user_signup));
+
+		if($user_signup){
+			$opts = get_option('fluent_demo_settings');
+			if($opts['newsletter'] == 'yes'){
+				$url = $opts['newsletter_url'];
+				if(!empty($opts['newsletter_fields'])){
+					$post_data = array();
+					foreach($opts['newsletter_fields'] as $field){
+						$post_data[$field['field']] = str_replace(array('[email]', '[first_name]', '[last_name]'), array($user_email, $user_first_name, $user_last_name), $field['value']);
+					}
+					$response = wp_remote_post( $url, array(
+						'method' => 'POST',
+						'timeout' => 45,
+						'redirection' => 5,
+						'httpversion' => '1.0',
+						'blocking' => true,
+						'headers' => array(),
+						'body' => $post_data,
+						'cookies' => array()
+					    )
+					);
+				}
+			}
+		}
+
+		return $id;
+	}
+
+	/**
+	* Proccess the demo request.
+	*
+	* This function takes a demo post id and proccesses it.
+	*
+	* @since 1.0.0
+	*
+	* @return mixed $status. Bool or wp_error
+	*
+	*/
+	public static function proccess_demo_from_id($id){
+		$status = self::proccess($id);
+		
+		if(is_wp_error($status)){
+			add_post_meta($id, 'demo_create_failed', $status->get_error_messages());
+			return false;
+		}
+		return $status;
+	}
+
+	/**
+	* Internal proccess function
+	*
+	* The takes the post id and uses the data saved to create the demo. also updates a meta value called status so ajax requests can monitor the proccess.
+	*
+	* @since 1.0.0
+	*
+	* @return mixed $id int on success, wp_error on failure.
+	*
+	*/
+	public static function proccess($post_id = null){
+		ignore_user_abort(true);
+		set_time_limit( 2400 ); // 60 seconds x 10 minutes
+		@ini_set('memory_limit','2048M');
+		//return false;
+		$self = new self;
+		$curr_blog = get_current_blog_id();
+
+		//get main settings
+		switch_to_blog(1);
+		$g_opts = get_site_option('fluent_demo');
+		$super_admin_id = $g_opts['admin_user'];
+		$user = get_userdata($super_admin_id);
+		if(!$user){
+			return new WP_Error('not_allowed', __('No super admin has been set to create the demo.', $self->domain));
+		}
+		$super_admin_email = $user->user_email;
+		restore_current_blog();
+
+
+		//work on request
+		$opts = get_option('fluent_demo_settings');
+		if($opts['enable_request'] != 'yes'){
+			return new WP_Error('not_allowed', __('Demos cannot be created for this blog.', $self->domain));
+		}
+
+		$blog_details = get_blog_details($curr_blog);
+
+		$meta = get_post_meta($post_id, 'fluent_demo_meta', true);
+
+		$new_user_email = $meta['email'];
+		$new_user_first_name = $meta['first_name'];
+		$new_user_last_name = $meta['last_name'];
+		$blog_path = preg_replace( '/[^a-z0-9]/', '', strtolower( $blog_details->path . md5(time() . $new_user_email) ));
+		$blog_name = get_bloginfo('name');
+		$password = __('Your Existing Password', $self->domain);
+		//$blog_id = get_post_meta($post_id, 'fluent_demo_blog_id', true);
+
+		//validate new user details
+		$user_id = username_exists($new_user_email);
+		if(!$user_id){
+			$user_id = email_exists($new_user_email);
+		}
+		if(!$user_id){
+			//validate without email as it fails
+			$valid_user = wpmu_validate_user_signup(preg_replace( '/[^a-z0-9]/', '', $new_user_email), $new_user_email);
+			$errors = $valid_user['errors']->get_error_messages();
+			if(!empty($errors)){
+				return $valid_user['errors'];
+			}
+			//need to send this password
+			$password = wp_generate_password();
+			$user_id = wp_create_user($new_user_email, $password, $new_user_email);
+			if(!is_wp_error($user_id)){
+				update_user_meta( $user_id, 'first_name', $new_user_first_name );
+				update_user_meta( $user_id, 'last_name', $new_user_last_name );
+				update_user_meta( $user_id, 'nickname', $new_user_first_name . ' ' . $new_user_last_name );
+				wp_update_user(array('ID' => $user_id, 'display_name' => $new_user_first_name . ' ' . $new_user_last_name));
+				remove_user_from_blog($user_id, $curr_blog);
+				//update progress
+				update_post_meta($post_id, 'fluent_demo_status', array('progress' => 10, 'message' => __('User Account Created.', $self->domain)));
+			}else{
+				return $user_id;
+			}
+		}else{
+			//update progress
+			update_post_meta($post_id, 'fluent_demo_status', array('progress' => 10, 'message' => __('User Account Found.', $self->domain)));
+		}
+
+
+		//if were here a use exists or has been created, lets add it to post
+		update_post_meta($post_id, 'fluent_demo_user', $user_id);
+
+		//validate blog details
+		$valid = wpmu_validate_blog_signup($blog_path, $blog_name);
+		$errors = $valid['errors']->get_error_messages();
+		if(!empty($errors)){
+			return $valid['errors'];
+		}
+		//if were here the blog details validate
+		update_post_meta($post_id, 'fluent_demo_valid_details', $valid);
+		//update progress
+		update_post_meta($post_id, 'fluent_demo_status', array('progress' => 20, 'message' => __('Demo Details Validated.', $self->domain)));
+
+		//valid contains all the valid details, so lets use them to create a blog
+		$blog_id = wpmu_create_blog( $valid['domain'], $valid['path'], $valid['blog_title'], $super_admin_id , array( "public" => 1 ), 1 );
+		if(is_wp_error($blog_id)){
+			return $blog_id;
+		}
+		//if were here the blog has been created
+		update_post_meta($post_id, 'fluent_demo_blog_id', $blog_id);
+		//update progress
+		update_post_meta($post_id, 'fluent_demo_status', array('progress' => 30, 'message' => __('Demo Site Created.', $self->domain)));
+
+		//duplicate blog tables to the new site
+		global $wpdb, $wp_version;
+		$from_blog_prefix = $wpdb->get_blog_prefix( $curr_blog );
+		$to_blog_prefix = $wpdb->get_blog_prefix( $blog_id );
+		$from_blog_prefix_length = strlen($from_blog_prefix);
+		$to_blog_prefix_length = strlen($to_blog_prefix);
+		$from_blog_escaped_prefix = str_replace( '_', '\_', $from_blog_prefix );
+
+		// Grab key options from new blog.
+		$saved_options = array(
+			'siteurl'=>'',
+			'home'=>'',
+			'upload_path'=>'',
+			'fileupload_url'=>'',
+			'upload_url_path'=>'',
+			'admin_email'=>'',
+			'blogname'=>''
+		);
+		// Options that should be preserved in the new blog.
+		foreach($saved_options as $option_name => $option_value) {
+			$saved_options[$option_name] = get_blog_option( $blog_id, $option_name );
+		}
+		//update progress
+		update_post_meta($post_id, 'fluent_demo_status', array('progress' => 40, 'message' => __('Demo Options Stored.', $self->domain)));
+
+
+		switch_to_blog($blog_id);
+		$to_tables = $wpdb->tables('blog');
+		switch_to_blog($curr_blog);
+		$from_tables = $wpdb->tables('blog');
+
+		$increment = (count($to_tables) / 20);
+		$percent = 40;
+
+		foreach($to_tables as $key => $table){
+			//ideally we would use $wpdb->prepare here but it doesnt allow 1 var and table name variables
+			$wpdb->query(sprintf("DROP TABLE IF EXISTS %s", $table));
+			$wpdb->query(sprintf("CREATE TABLE IF NOT EXISTS %s LIKE %s", $table, $from_tables[$key]));
+			$wpdb->query(sprintf("INSERT %s SELECT * FROM %s", $table, $from_tables[$key]));
+			$percent += $increment;
+			update_post_meta($post_id, 'fluent_demo_status', array('progress' => $percent, 'message' => $key . __(' Synced.', $self->domain)));
+		}
+
+		//update progress
+		update_post_meta($post_id, 'fluent_demo_status', array('progress' => 50, 'message' => __('Demo Database Saved.', $self->domain)));
+		
+		// apply key options from new blog.
+		switch_to_blog( $blog_id );
+		foreach( $saved_options as $option_name => $option_value ) {
+			update_option( $option_name, $option_value );
+		}
+
+		switch_to_blog($curr_blog);
+		//update progress
+		update_post_meta($post_id, 'fluent_demo_status', array('progress' => 60, 'message' => __('Demo Options Saved.', $self->domain)));
+		switch_to_blog($blog_id);
+
+		/// fix all options with the wrong prefix...
+		$query = $wpdb->prepare("SELECT * FROM {$wpdb->options} WHERE option_name LIKE %s",$from_blog_escaped_prefix.'%');
+		$options = $wpdb->get_results( $query );
+		if( $options ) {
+			foreach( $options as $option ) {
+			  $raw_option_name = substr($option->option_name,$from_blog_prefix_length);
+			  $wpdb->update( $wpdb->options, array( 'option_name' => $to_blog_prefix . $raw_option_name ), array( 'option_id' => $option->option_id ) );
+			}
+		}
+
+		// remove all fluent demo options
+		$wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE '%fluent_demo%'" );
+
+		// remove all fluent demo posts and meta
+		$wpdb->query("DELETE p.*, m.* FROM {$wpdb->posts} p LEFT JOIN {$to_blog_prefix}postmeta m ON m.post_id = p.ID WHERE p.post_type = 'demo'");
+		//$wpdb->query( "DELETE {$wpdb->posts}, {$to_blog_prefix}postmeta FROM {$wpdb->posts} JOIN {$to_blog_prefix}postmeta ON {$wpdb->posts}.ID = {$to_blog_prefix}postmeta.post_id WHERE {$wpdb->posts}.post_type = 'demo'" );
+
+		
+		// Fix GUIDs on copied posts
+		$from_blog_url = get_blog_option( $curr_blog, 'siteurl' );
+		$to_blog_url = get_blog_option( $blog_id, 'siteurl' );
+		$query = $wpdb->prepare( "UPDATE {$to_blog_prefix}posts SET guid = REPLACE(guid, '%s', '%s')", $from_blog_url, $to_blog_url );
+		$wpdb->query( $query );
+
+		//fix urls in new blog
+		$query = $wpdb->prepare( "UPDATE {$to_blog_prefix}posts SET post_content = REPLACE(post_content, '%s', '%s')", $from_blog_url, $to_blog_url );
+		$wpdb->query( $query );
+
+		/*
+		//fix serialized data
+		$serialized = $wpdb->get_results("SELECT meta_id,meta_value FROM {$to_blog_prefix}postmeta WHERE meta_value LIKE '%\:\{%';");
+		if($serialized){
+			foreach($serialized as $string){
+				if(is_serialized($string->meta_value)){
+					$data = @unserialize($string->meta_value);
+					$data = self::replace_array($data, $from_blog_url, $to_blog_url);
+					$wpdb->update( $to_blog_prefix.'postmeta', array( 'meta_value' => serialize($data) ), array( 'meta_id' => $string->meta_id ) );
+				}
+			}
+		}
+		$serialized = $wpdb->get_results("SELECT option_id,option_value FROM {$to_blog_prefix}options WHERE option_value LIKE '%\:\{%';");
+		if($serialized){
+			foreach($serialized as $string){
+				if(is_serialized($string->option_value)){
+					$data = @unserialize($string->option_value);
+					$data = self::replace_array($data, $from_blog_url, $to_blog_url);
+					$wpdb->update( $to_blog_prefix.'options', array( 'option_value' => serialize($data) ), array( 'option_id' => $string->option_id ) );
+				}
+			}
+		}*/
+		
+		//update progress
+		switch_to_blog( $curr_blog );
+		update_post_meta($post_id, 'fluent_demo_status', array('progress' => 70, 'message' => __('Demo Content Populated.', $self->domain)));
+		switch_to_blog( $blog_id );
+
+		//copy blog files
+
+		// Path to source blog files.
+		switch_to_blog($curr_blog);
+		$dir_info = wp_upload_dir();
+		$from = str_replace(' ', "\\ ", trailingslashit($dir_info['basedir'])); // * necessary with GNU cp, doesn't hurt anything with BSD cp
+
+		// Path to destination blog files.
+		switch_to_blog($blog_id);
+		$dir_info = wp_upload_dir();
+		$to = str_replace(' ', "\\ ", trailingslashit($dir_info['basedir']));
+
+		if(get_filesystem_method(array(), WP_CONTENT_DIR . '/uploads/sites') === 'direct'){
+			$creds = request_filesystem_credentials(wp_nonce_url(admin_url('admin.php?page=fluent-demo-setup&test=filesystem'), 'fluent-demo-setup'), '', false, WP_CONTENT_DIR . '/uploads/sites', null);
+			if ( ! WP_Filesystem($creds) ) {
+				return new WP_Error('filesystem_error', __('Unable to copy demo contents.', $self->domain));
+			}
+			global $wp_filesystem;
+			$files = $wp_filesystem->dirlist($from, false, true);
+			//remove the sites folder, only needed if were cloning the main one.
+			unset($files['sites']);
+			foreach($files as $file => $meta){
+				if($meta['type'] == 'd'){
+					$wp_filesystem->mkdir($to.$meta['name']);
+					self::proccess_dir($from.$meta['name'], $to.$meta['name'], $meta, $wp_filesystem);
+				}else{
+					$wp_filesystem->copy($from.$meta['name'], $to.$meta['name'], true);
+				}	
+			}
+		}
+
+		//update progress
+		switch_to_blog( $curr_blog );
+		update_post_meta($post_id, 'fluent_demo_status', array('progress' => 90, 'message' => __('Demo Creation Finished.', $self->domain)));
+		switch_to_blog( $blog_id );
+
+		//disable the demo plugin enabled status on new blog.
+		delete_option('fluent_demo_settings');
+
+		//set the option for it to be a demoed site
+		update_option('fluent_demoed', array('status' => true, 'from_blog' => $curr_blog, 'post_id' => $post_id));
+
+		//add user to blog
+		add_user_to_blog($blog_id, $user_id, 'editor');
+		wpmu_welcome_user_notification( $user_id, $password );
+
+		//restore current blog
+		switch_to_blog($curr_blog);
+		update_post_meta($post_id, 'fluent_demo_status', array('progress' => 95, 'message' => __('Adding User To Demo Site.', $self->domain)));
+
+		//update post status to published
+		wp_update_post(array('ID' => $post_id, 'post_status' => 'publish'));
+
+		update_post_meta($post_id, 'fluent_demo_status', array('progress' => 100, 'message' => __('Your Demo Site Is Ready. Your Account Details Have Been Emailed.<br/>Please Wait While We Redirect You.', $self->domain) . '<meta http-equiv="refresh" content="3; url='.add_query_arg(array('action' => 'fluent-demo-login', 'user_id' => $user_id, '_wpnonce' => wp_create_nonce('fluent-demo-created-login')), get_site_url($blog_id)).'">'));
+
+		//flush cache
+		wp_cache_flush();
+
+		return $post_id;
+	}
+
+	private static function proccess_dir($from, $to, $meta, $wp_filesystem){
+		if(!empty($meta['files'])){
+			foreach($meta['files'] as $key => $file){
+				if($file['type'] == 'd'){
+					$wp_filesystem->mkdir($to.'/'.$file['name']);
+					self::proccess_dir($from.'/'.$file['name'], $to.'/'.$file['name'], $file, $wp_filesystem);
+				}else{
+					$wp_filesystem->copy($from.'/'.$file['name'], $to.'/'.$file['name'], true);
+				}	
+			}
+		}
+	}
+
+	/**
+	* Internal functions used to replace urls in serialized data.
+	*
+	* @since 1.0.0
+	*
+	* @return array $newArray.
+	*
+	*/
+	private static function replace_array($array, $from, $to){
+			if (!is_array($array)) {
+			return str_replace($from, $to, $array);
+			}
+			$newArray = array();
+			foreach ($array as $key => $value) {
+			$newArray[$key] = self::replace_array($value);
+			}
+			return $newArray;
+		}
+}
