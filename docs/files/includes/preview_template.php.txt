@@ -16,6 +16,9 @@
         .accent-bg{
             background: <?php echo $data->accent_color;?>;
         }
+        #modal-body a{
+        	color: <?php echo $data->accent_color;?>;
+        }
         <?php echo $data->custom_css;?>
         </style>
         <?php if($data->break_out == 'yes'){?>
@@ -25,9 +28,21 @@
                 }
             </script>
         <?php }?>
+        <?php if($data->ga_code != ''){?>
+            <script>
+              (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+              (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+              m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+              })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+              ga('create', '<?php echo $data->ga_code;?>', 'auto');
+              ga('send', 'pageview');
+
+            </script>
+        <?php }?>
     </head>
     <body>
-    <!--<?php print_r($data);?>-->
+    <!--<?php //print_r($data);?>-->
 
         <!-- Header -->
         <header>
@@ -79,10 +94,10 @@
                     <input type="hidden" name="action" value="fluent-demo-request"/>
                     <input type="hidden" name="blog_id" value="<?php echo get_current_blog_id();?>"/>
 	        		<input type="text" name="first-name" id="first-name" value="" placeholder="<?php echo __('First Name', 'fluent-demo');?>"/>
-	        		<input type="text" name="last-name" id="last-name" value="" placeholder="<?php echo __('Last Name', 'fluent-demo');?>"/>
+	        		<input type="text" name="last-name" id="last-name" value="" placeholder="<?php echo __('Last Name', 'fluent-demo');?>"/><br/>
 	        		<input type="email" name="email" id="email" value="" placeholder="<?php echo __('Email', 'fluent-demo');?>"/>
                     <?php if($data->newsletter == 'yes'){
-                        echo '<label id="newsletter-label" for="newsletter"><input type="checkbox" name="newsletter" id="newsletter" value="yes"/> '.$data->newsletter_text.'</label>';
+                        echo '<label id="newsletter-label" for="newsletter"><input type="checkbox" '.(($data->newsletter_checkbox == 'yes') ? 'checked="checked" ' : '').'name="newsletter" id="newsletter" value="yes"/> '.$data->newsletter_text.'</label>';
                     }?>
 	        		<input type="submit" name="submit" id="submit" class="accent-bg" value="<?php echo __('Request Demo', 'fluent-demo');?>"/>
         		</form>
@@ -91,5 +106,18 @@
 
 
         <?php wp_print_scripts(array('fluent-demo-js'));?>
+        <?php if($data->ga_code != ''){?>
+            <script>
+                (function($) {
+                    'use strict';
+                    $(document).on('click', '.request-demo', function(){
+                        ga('send', 'event', 'Demo Request', 'Clicked');
+                    });
+                    $(document).on('click', '#submit', function(){
+                        ga('send', 'event', 'Demo Request', 'Submitted');
+                    });
+                })(jQuery);
+            </script>
+        <?php }?>
     </body>
 </html>

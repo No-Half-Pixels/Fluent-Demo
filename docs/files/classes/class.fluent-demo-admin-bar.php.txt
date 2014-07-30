@@ -6,7 +6,7 @@
  *
  * @package Fluent Demo
  * @since 1.0.0
- * @version 1.0.0
+ * @version 1.0.1
  */
 
 /**
@@ -17,7 +17,7 @@ class Fluent_Demo_Admin_Bar extends Fluent_Demo_Base{
 	/**
 	* @var string $version Class version.
 	*/
-	public $version = '1.0.0';
+	public $version = '1.0.1';
 
 	/**
 	* Function loaded on class creation
@@ -65,9 +65,11 @@ class Fluent_Demo_Admin_Bar extends Fluent_Demo_Base{
           		return;
 		global $wp_admin_bar;
 
+		include_once(ABSPATH.'wp-admin/includes/plugin.php');
+
 		foreach ( (array) $wp_admin_bar->user->blogs as $blog ) {
 			switch_to_blog( $blog->userblog_id );
-			if(!is_plugin_active(plugin_basename(FLUENT_DEMO_FILE))){
+			if(!function_exists('is_plugin_active') || !is_plugin_active(plugin_basename(FLUENT_DEMO_FILE))){
 				restore_current_blog();
 				continue;
 			}

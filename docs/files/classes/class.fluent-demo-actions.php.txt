@@ -89,7 +89,60 @@ class Fluent_Demo_Actions extends Fluent_Demo_Base{
     		if(!function_exists('wpmu_delete_blog')){
     			require_once(ABSPATH . 'wp-admin/includes/ms.php');
     		}
+            global $wpdb;
+            //get blog prefix before its deleted
+            $to_blog_prefix = $wpdb->get_blog_prefix($meta);
+            //delete blog
     		wpmu_delete_blog($meta, true);
+
+            //delete custom tables
+            $opts = get_option('fluent_demo_settings');
+            if($opts['custom_tables'] == true && !is_array($opts['custom_tables'])){
+                //get table name again
+                $prefix = $wpdb->get_blog_prefix();
+                $tables = array_merge($wpdb->tables('blog'), $wpdb->tables('ms_global'));
+                $_custom_tables = $wpdb->get_results("SHOW TABLES LIKE '%".$prefix."%';", ARRAY_A);
+                $custom_tables = array();
+                foreach($_custom_tables as $key => $cust){
+                    foreach($cust as $table_name){
+                        if(!in_array($table_name, $tables)){
+                            $custom_tables[$table_name] = $table_name;
+                        }
+                    }
+                }
+                foreach($custom_tables as $table){
+                    $wpdb->query(sprintf("DROP TABLE IF EXISTS %s", str_replace($prefix, $to_blog_prefix, $table)));
+                }
+            }elseif(!empty($opts['custom_tables']) && is_array($opts['custom_tables'])){
+                $prefix = $wpdb->get_blog_prefix();
+                foreach($opts['custom_tables'] as $table => $value){
+                    $wpdb->query(sprintf("DROP TABLE IF EXISTS %s", str_replace($prefix, $to_blog_prefix, $table)));
+                }
+            }
+
+            //send follow up email
+            if($opts['follow_up_email'] == 'yes' && $opts['follow_up_email_subject'] != '' && $opts['follow_up_email_message'] != ''){
+                $current_site = get_current_site();
+
+                $user = get_userdata(get_post_meta($post_id, 'fluent_demo_user', true));
+
+                $admin_email = get_site_option( 'admin_email' );
+
+                if ( $admin_email == '' )
+                    $admin_email = 'support@' . $_SERVER['SERVER_NAME'];
+
+                $from_name = get_site_option( 'site_name' ) == '' ? 'WordPress' : esc_html( get_site_option( 'site_name' ) );
+                $message_headers = "From: \"{$from_name}\" <{$admin_email}>\n" . "Content-Type: text/plain; charset=\"" . get_option('blog_charset') . "\"\n";
+                
+
+                $subject = str_replace(array('[email]', '[first_name]', '[last_name]'), array($user->user_email, $user->first_name, $user->last_name), $opts['follow_up_email_subject']);
+                $message = str_replace(array('[email]', '[first_name]', '[last_name]'), array($user->user_email, $user->first_name, $user->last_name), $opts['follow_up_email_message']);
+
+                if ( empty( $current_site->site_name ) )
+                    $current_site->site_name = 'WordPress';
+
+                wp_mail($user->user_email, $subject, $message, $message_headers);
+            }
     	}
     }
 

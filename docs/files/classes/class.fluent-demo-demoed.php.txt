@@ -6,7 +6,7 @@
  *
  * @package Fluent Demo
  * @since 1.0.0
- * @version 1.0.0
+ * @version 1.0.1
  */
 /**
  * Fluent_Demo_Demoed
@@ -16,7 +16,7 @@ class Fluent_Demo_Demoed extends Fluent_Demo_Base{
 	/**
      * @var string $domain Class text domain.
      */
-    public $version = '1.0.0';
+    public $version = '1.0.1';
 
     /**
      * @var array $meta. The demoed meta information.
@@ -29,10 +29,10 @@ class Fluent_Demo_Demoed extends Fluent_Demo_Base{
     public $options = array();
 
     public function __construct(){
-    	$this->meta = get_option('fluent_demoed');
+    	$this->meta = wp_unslash(get_option('fluent_demoed'));
 
         if(!$this->meta){return;}
-    	$this->options = get_blog_option($this->meta['from_blog'], 'fluent_demo_settings', array());
+    	$this->options = wp_unslash(get_blog_option($this->meta['from_blog'], 'fluent_demo_settings', array()));
 
     	//allow auto login
     	add_action('init', $this->provide('auto_login'));
@@ -62,7 +62,7 @@ class Fluent_Demo_Demoed extends Fluent_Demo_Base{
     }
 
     public function admin_notice(){
-    	if(!isset($this->options['admin_notices']) && $this->options['admin_notices'] == ''){return;}
+    	if(!isset($this->options['admin_notices']) || $this->options['admin_notices'] == ''){return;}
     	echo '<div class="updated">'.$this->options['admin_notices'].'</div>';
     }
 

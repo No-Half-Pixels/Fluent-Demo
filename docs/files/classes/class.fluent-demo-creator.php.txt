@@ -6,7 +6,7 @@
  *
  * @package Fluent Demo
  * @since 1.0.0
- * @version 1.0.0
+ * @version 1.0.1
  */
 
 /**
@@ -17,7 +17,7 @@ class Fluent_Demo_Creator extends Fluent_Demo_Base{
 	/**
 	* @var string $version Class version.
 	*/
-	public $version = '1.0.0';
+	public $version = '1.0.1';
 
 	/**
 	* Function loaded on class creation. Nothing to see here
@@ -230,9 +230,59 @@ class Fluent_Demo_Creator extends Fluent_Demo_Base{
 
 		switch_to_blog($blog_id);
 		$to_tables = $wpdb->tables('blog');
+
+		
+		if($opts['custom_tables'] == true){
+			//get table name again
+			switch_to_blog($curr_blog);
+			$prefix = $wpdb->get_blog_prefix();
+			$tables = array_merge($wpdb->tables('blog'), $wpdb->tables('ms_global'));
+			$_custom_tables = $wpdb->get_results("SHOW TABLES LIKE '%".$prefix."%';", ARRAY_A);
+			$custom_tables = array();
+			foreach($_custom_tables as $key => $cust){
+				foreach($cust as $table_name){
+					if(!in_array($table_name, $tables)){
+						$custom_tables[$table_name] = $table_name;
+					}
+				}
+			}
+			foreach($custom_tables as $table){
+				$to_tables[$table] = str_replace($from_blog_prefix, $to_blog_prefix, $table);
+			}
+			switch_to_blog($blog_id);
+		}elseif(is_array($opts['custom_tables'])){
+			foreach($opts['custom_tables'] as $table => $value){
+				$table_name = str_replace($from_blog_prefix, $to_blog_prefix, $table);
+				$to_tables[$table] = $table_name;
+			}
+		}
+		
+
 		switch_to_blog($curr_blog);
 		$from_tables = $wpdb->tables('blog');
-
+		
+		if($opts['custom_tables'] == true && !is_array($opts['custom_tables'])){
+			//get table name again
+			$prefix = $wpdb->get_blog_prefix();
+			$tables = array_merge($wpdb->tables('blog'), $wpdb->tables('ms_global'));
+			$_custom_tables = $wpdb->get_results("SHOW TABLES LIKE '%".$prefix."%';", ARRAY_A);
+			$custom_tables = array();
+			foreach($_custom_tables as $key => $cust){
+				foreach($cust as $table_name){
+					if(!in_array($table_name, $tables)){
+						$custom_tables[$table_name] = $table_name;
+					}
+				}
+			}
+			foreach($custom_tables as $table){
+				$from_tables[$table] = $table;
+			}
+		}elseif(!empty($opts['custom_tables']) && is_array($opts['custom_tables'])){
+			foreach($opts['custom_tables'] as $table => $value){
+				$from_tables[$table] = $table;
+			}
+		}
+		
 		$increment = (count($to_tables) / 20);
 		$percent = 40;
 
@@ -368,7 +418,12 @@ class Fluent_Demo_Creator extends Fluent_Demo_Base{
 		//update post status to published
 		wp_update_post(array('ID' => $post_id, 'post_status' => 'publish'));
 
-		update_post_meta($post_id, 'fluent_demo_status', array('progress' => 100, 'message' => __('Your Demo Site Is Ready. Your Account Details Have Been Emailed.<br/>Please Wait While We Redirect You.', $self->domain) . '<meta http-equiv="refresh" content="3; url='.add_query_arg(array('action' => 'fluent-demo-login', 'user_id' => $user_id, '_wpnonce' => wp_create_nonce('fluent-demo-created-login')), get_site_url($blog_id)).'">'));
+		if(is_super_admin($user_id)){
+			update_post_meta($post_id, 'fluent_demo_status', array('progress' => 100, 'message' => __('Your Demo Site Is Ready. Your Account Details Have Been Emailed To You.', $self->domain)));
+		}else{
+			$url = add_query_arg(array('action' => 'fluent-demo-login', 'user_id' => $user_id, '_wpnonce' => wp_create_nonce('fluent-demo-created-login')), get_site_url($blog_id));
+			update_post_meta($post_id, 'fluent_demo_status', array('progress' => 100, 'message' => __('Your Demo Site Is Ready. Your Account Details Have Been Emailed To You.<br/>Please Wait While We Redirect You.<br/>If you are not redirected after 3 seconds please <a href="'.$url.'">click here</a>.', $self->domain) . '<meta http-equiv="refresh" content="3; url='.$url.'">'));
+		}
 
 		//flush cache
 		wp_cache_flush();

@@ -6,7 +6,7 @@
  *
  * @package Fluent Demo
  * @since 1.0.0
- * @version 1.0.0
+ * @version 1.0.1
  */
 
 /**
@@ -17,7 +17,7 @@ class Fluent_Demo_Frontend extends Fluent_Demo_Base{
 	/**
 	* @var string $version Class version.
 	*/
-	public $version = '1.0.0';
+	public $version = '1.0.1';
 
 	/**
 	* Function loaded on class creation

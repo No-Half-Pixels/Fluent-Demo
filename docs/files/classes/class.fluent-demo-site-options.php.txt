@@ -6,7 +6,7 @@
  *
  * @package Fluent Demo
  * @since 1.0.0
- * @version 1.0.0
+ * @version 1.0.1
  */
 /**
  * Fluent_Demo_Site_Options
@@ -16,7 +16,7 @@ class Fluent_Demo_Site_Options extends Fluent_Demo_Global_Options{
 	/**
      * @var string $version Class version.
      */
-    public $version = '1.0.0';
+    public $version = '1.0.1';
 
     /**
       * Function loaded on class creation
@@ -82,8 +82,8 @@ class Fluent_Demo_Site_Options extends Fluent_Demo_Global_Options{
 		            'conditions' => array(
 		            	array(
 		            		array(
-		            			'id' => 'title',
-		            			'type' => 'required'
+		            			'id' => 'enabled',
+		            			'value' => 'yes'
 		            		)
 		            	)
 		            ),
@@ -96,8 +96,8 @@ class Fluent_Demo_Site_Options extends Fluent_Demo_Global_Options{
 		            'conditions' => array(
 		            	array(
 		            		array(
-		            			'id' => 'screenshot',
-		            			'type' => 'required'
+		            			'id' => 'enabled',
+		            			'value' => 'yes'
 		            		)
 		            	)
 		            ),
@@ -111,8 +111,8 @@ class Fluent_Demo_Site_Options extends Fluent_Demo_Global_Options{
 		            'conditions' => array(
 		            	array(
 		            		array(
-		            			'id' => 'url',
-		            			'type' => 'required'
+		            			'id' => 'enabled',
+		            			'value' => 'yes'
 		            		)
 		            	)
 		            ),
@@ -127,28 +127,42 @@ class Fluent_Demo_Site_Options extends Fluent_Demo_Global_Options{
 		            'conditions' => array(
 		            	array(
 		            		array(
-		            			'id' => 'url',
-		            			'type' => 'required'
+		            			'id' => 'enabled',
+		            			'value' => 'yes'
 		            		)
 		            	)
 		            ),
 		        ),
-		        'admin_notices' => array(
-		            'type' => 'editor',
-		            'title' => __('Admin Notice', $this->domain),
+		        'ga_code' => array(
+		            'type' => 'text',
+		            'title' => __('Google Analytics', $this->domain),
 		            'sub_title' => __('', $this->domain),
-		            'description' => __('Create an admin notice on demo\'ed sites to provide useful information to the visitor. This will be dispalyed in the admin area only.', $this->domain),
+		            'description' => __('Enter your GA Tracking ID to enabled analytics on the demo bar.', $this->domain),
 		            'conditions' => array(
 		            	array(
 		            		array(
-		            			'id' => 'url',
-		            			'type' => 'required'
+		            			'id' => 'enabled',
+		            			'value' => 'yes'
 		            		)
 		            	)
 		            ),
 		        ),
+		        
 		    )
 		);
+
+		global $wpdb;
+		$prefix = $wpdb->get_blog_prefix();
+		$tables = array_merge($wpdb->tables('blog'), $wpdb->tables('ms_global'));
+		$_custom_tables = $wpdb->get_results("SHOW TABLES LIKE '%".$prefix."%';", ARRAY_A);
+		$custom_tables = array();
+		foreach($_custom_tables as $key => $cust){
+			foreach($cust as $table_name){
+				if(!in_array($table_name, $tables)){
+					$custom_tables[$table_name] = $table_name;
+				}
+			}
+		}
 		$this->sections['demo_request_settings'] = array(
 		    'dash_icon' => 'plus-alt',
 		    'title' =>  __('Demo Request Settings', $this->domain),
@@ -164,17 +178,39 @@ class Fluent_Demo_Site_Options extends Fluent_Demo_Global_Options{
 		            'options' => array('no' => __('No', $this->domain),'yes' => __('Yes', $this->domain)),
 		            'default' => 'no'
 		        ),
+		        'custom_tables' => array(
+		            'type' => 'checkbox',
+		            'title' => __('Custom Tables', $this->domain),
+		            'sub_title' => __('', $this->domain),
+		            'description' => ((empty($custom_tables)) ? __('None detected.', $this->domain) : __('Above are any custom tables we detected for this demo site. Please check any that need to be cloned when demos are made.', $this->domain)),
+		            'options' => $custom_tables,
+		            'inline' => false
+		        ),
+		        'admin_notices' => array(
+		            'type' => 'editor',
+		            'title' => __('Admin Notice', $this->domain),
+		            'sub_title' => __('', $this->domain),
+		            'description' => __('Create an admin notice on demo\'ed sites to provide useful information to the visitor. This will be displayed in the admin area only.', $this->domain),
+		        ),
 		        'newsletter' => array(
 		            'type' => 'radio',
 		            'title' => __('Newsletter Signup', $this->domain),
 		            'sub_title' => __('', $this->domain),
 		            'description' => __('Enabling the newsletter box will allow you to submit requests on signup to any newsletter software.', $this->domain),
 		            'options' => array('no' => __('No', $this->domain),'yes' => __('Yes', $this->domain)),
+		            'default' => 'no'
+		        ),
+		        'newsletter_checkbox' => array(
+		            'type' => 'radio',
+		            'title' => __('Newsletter Signup Default', $this->domain),
+		            'sub_title' => __('', $this->domain),
+		            'description' => __('Choose to check the newsletter checkbox by default (can be unchecked by user).', $this->domain),
+		            'options' => array('no' => __('Unchecked', $this->domain),'yes' => __('Checked', $this->domain)),
 		            'default' => 'no',
 		            'conditions' => array(
 		            	array(
 		            		array(
-		            			'id' => 'enable_request',
+		            			'id' => 'newsletter',
 		            			'value' => 'yes'
 		            		)
 		            	)
@@ -234,6 +270,42 @@ class Fluent_Demo_Site_Options extends Fluent_Demo_Global_Options{
 				        ),
 		            ),
 		        ),
+		        'follow_up_email' => array(
+		            'type' => 'radio',
+		            'title' => __('Follow Up Email', $this->domain),
+		            'sub_title' => __('', $this->domain),
+		            'description' => __('Would you like to send a one time only follow up email to the demo user when the demo expires?', $this->domain),
+		            'options' => array('no' => __('No', $this->domain),'yes' => __('Yes', $this->domain)),
+		            'default' => 'no',
+		        ),
+		        'follow_up_email_subject' => array(
+		            'type' => 'text',
+		            'title' => __('Follow Up Email Subject', $this->domain),
+		            'sub_title' => __('', $this->domain),
+		            'description' => __('This will be the subject of the follow up email. You can use the <code>[first_name]</code>, <code>[last_name]</code>, <code>[email]</code> shortcodes to populate the content dynamically.', $this->domain),
+		            'conditions' => array(
+		            	array(
+		            		array(
+		            			'id' => 'follow_up_email',
+		            			'value' => 'yes'
+		            		)
+		            	)
+		            ),
+		        ),
+		        'follow_up_email_message' => array(
+		            'type' => 'textarea',
+		            'title' => __('Follow Up Email Message', $this->domain),
+		            'sub_title' => __('', $this->domain),
+		            'description' => __('This will be the message of the follow up email. You can use the <code>[first_name]</code>, <code>[last_name]</code>, <code>[email]</code> shortcodes to populate the content dynamically.', $this->domain),
+		            'conditions' => array(
+		            	array(
+		            		array(
+		            			'id' => 'follow_up_email',
+		            			'value' => 'yes'
+		            		)
+		            	)
+		            ),
+		        ),
 		    )
 		);
 	}
@@ -249,6 +321,7 @@ class Fluent_Demo_Site_Options extends Fluent_Demo_Global_Options{
 	private function setup_page_args(){
 		$this->page_args = array(
 		    'option_name' => 'fluent_demo_settings',
+		    'dev_mode' => false,
 		    'page_args' => array(
 		        'slug' => 'fluent-demo-settings',//the unique slug of the page
 		        'menu_title' => __( 'Settings', $this->domain),//the title in the sidebar menu of the page
